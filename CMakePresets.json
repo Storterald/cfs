@@ -1,0 +1,124 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 5,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "common",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "installDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "PRESETS_PROFILE": "ON",
+        "CMAKE_C_STANDARD": "99",
+        "CMAKE_C_STANDARD_REQUIRED": "ON",
+        "CMAKE_CXX_STANDARD": "23",
+        "CMAKE_CXX_STANDARD_REQUIRED": "ON"
+      },
+      "warnings": {
+        "unusedCli": false
+      }
+    },
+    {
+      "name": "gcc",
+      "hidden": true,
+      "inherits": "common",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++",
+        "CMAKE_C_FLAGS": "-m64",
+        "CMAKE_CXX_FLAGS": "-m64"
+      },
+      "vendor": {
+        "jetbrains.com/clion": {
+          "toolchain": "MinGW GCC"
+        },
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "intelliSenseMode": "linux-gcc-x64"
+        }
+      }
+    },
+    {
+      "name": "clang",
+      "hidden": true,
+      "inherits": "common",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_C_FLAGS": "-m64",
+        "CMAKE_CXX_FLAGS": "-m64"
+      },
+      "vendor": {
+        "jetbrains.com/clion": {
+          "toolchain": "MinGW Clang"
+        },
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "intelliSenseMode": "linux-gcc-x64"
+        }
+      }
+    },
+    {
+      "name": "gcc-debug",
+      "displayName": "GCC Debug",
+      "inherits": "gcc",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "gcc-release",
+      "displayName": "GCC Release",
+      "inherits": "gcc",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "clang-debug",
+      "displayName": "Clang Debug",
+      "inherits": "clang",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "clang-release",
+      "displayName": "Clang Release",
+      "inherits": "clang",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "gcc-debug-build",
+      "displayName": "GCC Debug",
+      "configuration": "Debug",
+      "configurePreset": "gcc-debug"
+    },
+    {
+      "name": "gcc-release-build",
+      "displayName": "GCC Release",
+      "configuration": "Release",
+      "configurePreset": "gcc-release"
+    },
+    {
+      "name": "clang-debug-build",
+      "displayName": "Clang Debug",
+      "configuration": "Debug",
+      "configurePreset": "clang-debug"
+    },
+    {
+      "name": "clang-release-build",
+      "displayName": "Clang Release",
+      "configuration": "Release",
+      "configurePreset": "clang-release"
+    }
+  ]
+}
