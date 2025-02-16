@@ -21,8 +21,8 @@ typedef bool fs_bool;
 #include <wchar.h>
 
 #define FS_PATH_CHAR_TYPE wchar_t
-#define FS_PREFERRED_SEPARATOR '\\'
-#define FS_PREFERRED_SEPARATOR_S "\\"
+#define FS_PREFERRED_SEPARATOR L'\\'
+#define FS_PREFERRED_SEPARATOR_S L"\\"
 #else // _WIN32
 #define FS_PATH_CHAR_TYPE char
 #define FS_PREFERRED_SEPARATOR '/'
@@ -44,6 +44,7 @@ typedef enum fs_error_type {
 typedef struct fs_error_code {
         fs_error_type type;
         uint32_t code;
+        char *msg;
 
 } fs_error_code;
 
@@ -143,20 +144,21 @@ typedef struct fs_file_status {
 #define FS_DIRECTORY_IS_SAME        0x8002
 #define FS_INVALID_ITEM_TYPE        0x8003
 #define FS_INVALID_CONFIGURATION    0x8004
-#define FS_ERROR_IS_DIRECTORY       0x8004
-#define FS_COULD_NOT_LIST_DIRECTORY 0x8005
-#define FS_FILE_IS_SAME             0x8006
-#define FS_DIRECTORY_NOT_EMPTY      0x8007
-#define FS_DISTANCE_TOO_BIG         0x8008
-#define FS_BUFFER_TOO_SMALL         0x8009
-#define FS_ITEM_DOES_NOT_EXIST      0x800A
-#define FS_PATH_TOO_BIG             0x800B
-#define FS_ALLOCATION_ERROR         0x800C
+#define FS_ERROR_IS_DIRECTORY       0x8005
+#define FS_COULD_NOT_LIST_DIRECTORY 0x8006
+#define FS_FILE_IS_SAME             0x8007
+#define FS_DIRECTORY_NOT_EMPTY      0x8008
+#define FS_DISTANCE_TOO_BIG         0x8009
+#define FS_BUFFER_TOO_SMALL         0x800A
+#define FS_CANONICAL_PATH_INVALID   0x800B
 
-#define RESET_ERROR(pec)                        \
+#define FS_RESET_ERROR(pec)                     \
 do {                                            \
         (pec)->type = fs_error_type_unknown;    \
         (pec)->code = FS_ERRORS_NONE;           \
+        if ((pec)->msg)                         \
+                free((pec)->msg);               \
+        (pec)->msg = NULL;                      \
 } while (FS_FALSE)
 
 fs_path fs_absolute(fs_cpath p, fs_error_code *ec);
@@ -290,6 +292,12 @@ void fs_path_replace_filename(fs_path *pp, fs_cpath replacement, fs_error_code *
 void fs_path_replace_extension(fs_path *pp, fs_cpath replacement, fs_error_code *ec);
 
 int fs_path_compare(fs_cpath p, fs_cpath other);
+
+fs_path fs_path_lexically_normal(fs_cpath p);
+
+fs_path fs_path_lexically_relative(fs_cpath p, fs_cpath base);
+
+fs_path fs_path_lexically_proximate(fs_cpath p, fs_cpath base);
 
 fs_path fs_path_root_name(fs_cpath p);
 

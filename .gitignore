@@ -4,3 +4,6 @@
 
 # Output
 build/
+
+# Tests
+tests/TestRoot
