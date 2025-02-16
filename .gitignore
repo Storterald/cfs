@@ -1,2 +1,6 @@
+# IDEs
+.idea/
+.vscode/
+
 # Output
 build/
