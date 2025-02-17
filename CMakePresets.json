@@ -43,31 +43,12 @@
       }
     },
     {
-      "name": "clang",
-      "hidden": true,
-      "inherits": "common",
-      "generator": "Ninja",
-      "cacheVariables": {
-        "CMAKE_C_COMPILER": "clang",
-        "CMAKE_CXX_COMPILER": "clang++",
-        "CMAKE_C_FLAGS": "-m64",
-        "CMAKE_CXX_FLAGS": "-m64"
-      },
-      "vendor": {
-        "jetbrains.com/clion": {
-          "toolchain": "MinGW Clang"
-        },
-        "microsoft.com/VisualStudioSettings/CMake/1.0": {
-          "intelliSenseMode": "linux-gcc-x64"
-        }
-      }
-    },
-    {
-      "name": "gcc-debug",
-      "displayName": "GCC Debug",
+      "name": "gcc-test",
+      "displayName": "GCC Test",
       "inherits": "gcc",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_TESTS": "ON"
       }
     },
     {
@@ -77,48 +58,20 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
-    },
-    {
-      "name": "clang-debug",
-      "displayName": "Clang Debug",
-      "inherits": "clang",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
-      }
-    },
-    {
-      "name": "clang-release",
-      "displayName": "Clang Release",
-      "inherits": "clang",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
-      }
     }
   ],
   "buildPresets": [
     {
-      "name": "gcc-debug-build",
-      "displayName": "GCC Debug",
-      "configuration": "Debug",
-      "configurePreset": "gcc-debug"
+      "name": "gcc-test-build",
+      "displayName": "GCC Test",
+      "configuration": "Test",
+      "configurePreset": "gcc-test"
     },
     {
       "name": "gcc-release-build",
       "displayName": "GCC Release",
       "configuration": "Release",
       "configurePreset": "gcc-release"
-    },
-    {
-      "name": "clang-debug-build",
-      "displayName": "Clang Debug",
-      "configuration": "Debug",
-      "configurePreset": "clang-debug"
-    },
-    {
-      "name": "clang-release-build",
-      "displayName": "Clang Release",
-      "configuration": "Release",
-      "configurePreset": "clang-release"
     }
   ]
 }

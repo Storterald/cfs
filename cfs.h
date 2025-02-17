@@ -151,6 +151,8 @@ typedef struct fs_file_status {
 #define FS_DISTANCE_TOO_BIG         0x8009
 #define FS_BUFFER_TOO_SMALL         0x800A
 #define FS_CANONICAL_PATH_INVALID   0x800B
+#define FS_INVALID_ARGUMENT         0x800C
+#define FS_NULL_ARGUMENT            0x800D
 
 #define FS_RESET_ERROR(pec)                     \
 do {                                            \
@@ -276,10 +278,7 @@ fs_path fs_path_append(fs_cpath p, fs_cpath other);
 fs_path _fs_path_appendv(int c, ...);
 #define fs_path_append_v(...) _fs_path_appendv(sizeof((fs_cpath []){__VA_ARGS__}) / sizeof(fs_path), __VA_ARGS__)
 
-void fs_path_append_s(fs_path *pp, fs_cpath other);
-
 fs_path fs_path_concat(fs_cpath p, fs_cpath other);
-void fs_path_concat_s(fs_path *pp, fs_cpath other);
 
 void fs_path_clear(fs_path *pp);
 
@@ -315,21 +314,25 @@ fs_path fs_path_stem(fs_cpath p);
 
 fs_path fs_path_extension(fs_cpath p);
 
-fs_bool fs_has_root_path(fs_cpath p);
+fs_bool fs_path_has_root_path(fs_cpath p);
 
-fs_bool fs_has_root_name(fs_cpath p);
+fs_bool fs_path_has_root_name(fs_cpath p);
 
-fs_bool fs_has_root_directory(fs_cpath p);
+fs_bool fs_path_has_root_directory(fs_cpath p);
 
-fs_bool fs_has_relative_path(fs_cpath p);
+fs_bool fs_path_has_relative_path(fs_cpath p);
 
-fs_bool fs_has_parent_path(fs_cpath p);
+fs_bool fs_path_has_parent_path(fs_cpath p);
 
-fs_bool fs_has_filename(fs_cpath p);
+fs_bool fs_path_has_filename(fs_cpath p);
 
-fs_bool fs_has_stem(fs_cpath p);
+fs_bool fs_path_has_stem(fs_cpath p);
 
-fs_bool fs_has_extension(fs_cpath p);
+fs_bool fs_path_has_extension(fs_cpath p);
+
+fs_bool fs_path_is_absolute(fs_cpath p);
+
+fs_bool fs_path_is_relative(fs_cpath p);
 
 //          fs_path --------
 
