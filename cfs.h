@@ -32,6 +32,22 @@ typedef bool fs_bool;
 typedef FS_PATH_CHAR_TYPE *fs_path;
 typedef const FS_PATH_CHAR_TYPE *fs_cpath;
 
+typedef struct fs_path_iter {
+        fs_cpath pos;
+        fs_path elem;
+        fs_cpath begin;
+} fs_path_iter;
+
+#define FS_DESTROY_ITER(it)     \
+do {                            \
+        it.pos = NULL;          \
+        free(it.elem);          \
+        it.elem = NULL;         \
+        it.begin = NULL;        \
+} while (FS_FALSE)
+
+#define FS_DEREF_ITER(it) ((it).elem)
+
 typedef uint64_t fs_file_time_type;
 
 typedef enum fs_error_type {
@@ -158,8 +174,7 @@ typedef struct fs_file_status {
 do {                                            \
         (pec)->type = fs_error_type_unknown;    \
         (pec)->code = FS_ERRORS_NONE;           \
-        if ((pec)->msg)                         \
-                free((pec)->msg);               \
+        free((pec)->msg);                       \
         (pec)->msg = NULL;                      \
 } while (FS_FALSE)
 
@@ -334,7 +349,19 @@ fs_bool fs_path_is_absolute(fs_cpath p);
 
 fs_bool fs_path_is_relative(fs_cpath p);
 
+fs_path_iter fs_path_begin(fs_cpath p);
+
+fs_path_iter fs_path_end(fs_cpath p);
+
 //          fs_path --------
+
+// -------- fs_path_iters
+
+void fs_path_iter_next(fs_path_iter *it);
+
+void fs_path_iter_prev(fs_path_iter *it);
+
+//          fs_path_iters --------
 
 #ifdef __cplusplus
 }
