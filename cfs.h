@@ -1,11 +1,12 @@
 #ifndef FILESYSTEM_LIBRARY_H
 #define FILESYSTEM_LIBRARY_H
 
+#include <stdint.h>
+#include <errno.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <stdint.h>
 
 #if (!defined __STDC_VERSION__ || __STDC_VERSION__ < 202000) && !defined __cplusplus
 typedef uint8_t fs_bool;
@@ -20,49 +21,43 @@ typedef bool fs_bool;
 #ifdef _WIN32
 #include <wchar.h>
 
-#define FS_PATH_CHAR_TYPE wchar_t
+#define FS_CHAR wchar_t
 #define FS_PREFERRED_SEPARATOR L'\\'
 #define FS_PREFERRED_SEPARATOR_S L"\\"
 #else // _WIN32
-#define FS_PATH_CHAR_TYPE char
+#define FS_CHAR char
 #define FS_PREFERRED_SEPARATOR '/'
 #define FS_PREFERRED_SEPARATOR_S "/"
 #endif // _WIN32
 
-typedef FS_PATH_CHAR_TYPE *fs_path;
-typedef const FS_PATH_CHAR_TYPE *fs_cpath;
+#define FS_DESTROY_PATH_ITER(it)        \
+do {                                    \
+        it.pos = NULL;                  \
+        free(it.elem);                  \
+        it.elem = NULL;                 \
+        it.begin = NULL;                \
+} while (FS_FALSE)
 
-typedef struct fs_path_iter {
-        fs_cpath pos;
-        fs_path elem;
-        fs_cpath begin;
-} fs_path_iter;
-
-#define FS_DESTROY_ITER(it)     \
+#define FS_DESTROY_DIR_ITER(it) \
 do {                            \
-        it.pos = NULL;          \
-        free(it.elem);          \
         it.elem = NULL;         \
-        it.begin = NULL;        \
+        free(it.elems);         \
+        it.elems = NULL;        \
 } while (FS_FALSE)
 
 #define FS_DEREF_ITER(it) ((it).elem)
 
+#define FS_RESET_ERROR(pec)                     \
+do {                                            \
+        (pec)->type = fs_error_type_unknown;    \
+        (pec)->code = 0;                        \
+        free((pec)->msg);                       \
+        (pec)->msg = NULL;                      \
+} while (FS_FALSE)
+
 typedef uint64_t fs_file_time_type;
-
-typedef enum fs_error_type {
-        fs_error_type_unknown,
-        fs_error_type_filesystem,
-        fs_error_type_system
-
-} fs_error_type;
-
-typedef struct fs_error_code {
-        fs_error_type type;
-        uint32_t code;
-        char *msg;
-
-} fs_error_code;
+typedef FS_CHAR *fs_path;
+typedef const FS_CHAR *fs_cpath;
 
 typedef enum fs_file_type {
         fs_file_type_none,
@@ -81,27 +76,6 @@ typedef enum fs_file_type {
         fs_file_junction // implementation-defined value indicating an NT junction
 
 } fs_file_type;
-
-typedef enum fs_copy_options {
-        fs_copy_options_none = 0x0,
-
-        _fs_copy_Existing_mask = 0xF,
-        fs_copy_options_skip_existing = 0x1,
-        fs_copy_options_overwrite_existing = 0x2,
-        fs_copy_options_update_existing = 0x4,
-
-        fs_copy_options_recursive = 0x10,
-
-        _fs_copy_Symlinks_mask = 0xF00,
-        fs_copy_options_copy_symlinks = 0x100,
-        fs_copy_options_skip_symlinks = 0x200,
-
-        _fs_copy_Copy_form_mask = 0xF000,
-        fs_copy_options_directories_only = 0x1000,
-        fs_copy_options_create_symlinks = 0x2000,
-        fs_copy_options_create_hard_links = 0x4000
-
-} fs_copy_options;
 
 typedef enum fs_perms {
         fs_perms_none = 0000,
@@ -142,6 +116,34 @@ typedef enum fs_perm_options {
 
 } fs_perm_options;
 
+typedef enum fs_copy_options {
+        fs_copy_options_none = 0x0,
+
+        _fs_copy_Existing_mask = 0xF,
+        fs_copy_options_skip_existing = 0x1,
+        fs_copy_options_overwrite_existing = 0x2,
+        fs_copy_options_update_existing = 0x4,
+
+        fs_copy_options_recursive = 0x10,
+
+        _fs_copy_Symlinks_mask = 0xF00,
+        fs_copy_options_copy_symlinks = 0x100,
+        fs_copy_options_skip_symlinks = 0x200,
+
+        _fs_copy_Copy_form_mask = 0xF000,
+        fs_copy_options_directories_only = 0x1000,
+        fs_copy_options_create_symlinks = 0x2000,
+        fs_copy_options_create_hard_links = 0x4000
+
+} fs_copy_options;
+
+typedef enum fs_error_type {
+        fs_error_type_unknown,
+        fs_error_type_filesystem, // ERRNO ERRORS
+        fs_error_type_system
+
+} fs_error_type;
+
 typedef struct fs_space_info {
         uintmax_t capacity;
         uintmax_t free;
@@ -154,29 +156,26 @@ typedef struct fs_file_status {
         fs_perms perms;
 } fs_file_status;
 
-#define FS_ERRORS_NONE 0
-#define FS_DIRECTORY_ALREADY_EXISTS 0x8000
-#define FS_DIRECTORY_DOES_NOT_EXIST 0x8001
-#define FS_DIRECTORY_IS_SAME        0x8002
-#define FS_INVALID_ITEM_TYPE        0x8003
-#define FS_INVALID_CONFIGURATION    0x8004
-#define FS_ERROR_IS_DIRECTORY       0x8005
-#define FS_COULD_NOT_LIST_DIRECTORY 0x8006
-#define FS_FILE_IS_SAME             0x8007
-#define FS_DIRECTORY_NOT_EMPTY      0x8008
-#define FS_DISTANCE_TOO_BIG         0x8009
-#define FS_BUFFER_TOO_SMALL         0x800A
-#define FS_CANONICAL_PATH_INVALID   0x800B
-#define FS_INVALID_ARGUMENT         0x800C
-#define FS_NULL_ARGUMENT            0x800D
+typedef struct fs_error_code {
+        fs_error_type type;
+        uint32_t code;
+        char *msg;
 
-#define FS_RESET_ERROR(pec)                     \
-do {                                            \
-        (pec)->type = fs_error_type_unknown;    \
-        (pec)->code = FS_ERRORS_NONE;           \
-        free((pec)->msg);                       \
-        (pec)->msg = NULL;                      \
-} while (FS_FALSE)
+} fs_error_code;
+
+typedef struct fs_path_iter {
+        fs_cpath pos;
+        fs_path elem;
+        fs_cpath begin;
+} fs_path_iter;
+
+typedef struct fs_dir_iter {
+        fs_cpath elem;
+        fs_cpath *elems;
+
+} fs_dir_iter;
+
+typedef fs_dir_iter fs_recursive_dir_iter;
 
 fs_path fs_absolute(fs_cpath p, fs_error_code *ec);
 
@@ -214,6 +213,8 @@ fs_path fs_current_path(fs_error_code *ec);
 
 void fs_current_path_ch(fs_cpath p, fs_error_code *ec);
 
+fs_bool fs_exists_s(fs_file_status s);
+
 fs_bool fs_exists(fs_cpath p, fs_error_code *ec);
 
 fs_bool fs_equivalent(fs_cpath p1, fs_cpath p2, fs_error_code *ec);
@@ -238,7 +239,7 @@ uintmax_t fs_remove_all(fs_cpath p, fs_error_code *ec);
 
 void fs_rename(fs_cpath old_p, fs_cpath new_p, fs_error_code *ec);
 
-void fs_resize_file(fs_cpath p, uintmax_t new_size, fs_error_code *ec);
+void fs_resize_file(fs_cpath p, uintmax_t size, fs_error_code *ec);
 
 fs_space_info fs_space(fs_cpath p, fs_error_code *ec);
 
@@ -282,9 +283,7 @@ fs_bool fs_is_symlink_s(fs_file_status s);
 
 fs_bool fs_is_symlink(fs_cpath p, fs_error_code *ec);
 
-fs_bool fs_is_status_known_s(fs_file_status s);
-
-fs_bool fs_is_status_known(fs_cpath p, fs_error_code *ec);
+fs_bool fs_status_known(fs_file_status s);
 
 // -------- fs_path
 
@@ -355,13 +354,25 @@ fs_path_iter fs_path_end(fs_cpath p);
 
 //          fs_path --------
 
-// -------- fs_path_iters
+// -------- fs_iters
 
 void fs_path_iter_next(fs_path_iter *it);
 
 void fs_path_iter_prev(fs_path_iter *it);
 
-//          fs_path_iters --------
+fs_dir_iter fs_directory_iterator(fs_cpath p, fs_error_code *ec);
+
+void fs_dir_iter_next(fs_dir_iter *it);
+
+void fs_dir_iter_prev(fs_dir_iter *it);
+
+fs_recursive_dir_iter fs_recursive_directory_iterator(fs_cpath p, fs_error_code *ec);
+
+void fs_recursive_dir_iter_next(fs_recursive_dir_iter *it);
+
+void fs_recursive_dir_iter_prev(fs_recursive_dir_iter *it);
+
+//          fs_iters --------
 
 #ifdef __cplusplus
 }
