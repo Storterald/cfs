@@ -143,7 +143,7 @@ static FS_CHAR_CIT find_extension(fs_cpath p, FS_CHAR_CIT ads);
 
 #ifdef _WIN32
 static DWORD map_perms(fs_perms perms);
-static uint32_t recursive_count(fs_cpath searchp, fs_error_code *ec);
+static uint32_t recursive_count(fs_cpath p, fs_error_code *ec);
 static uint32_t recursive_entries(fs_cpath p, fs_cpath *buf);
 #endif // _WIN32
 
@@ -623,12 +623,15 @@ DWORD map_perms(fs_perms perms)
         return access;
 }
 
-uint32_t recursive_count(fs_cpath searchp, fs_error_code *ec)
+uint32_t recursive_count(fs_cpath p, fs_error_code *ec)
 {
-        uint32_t count = 1; // count self
+        const size_t len = wcslen(p);
+        wchar_t searchPath[MAX_PATH] = L"";
+        wcscpy(searchPath, p);
+        wcscat(searchPath, L"\\*");
 
         WIN32_FIND_DATAW findFileData;
-        HANDLE hFind = FindFirstFileW(searchp, &findFileData);
+        HANDLE hFind = FindFirstFileW(searchPath, &findFileData);
         if (hFind == INVALID_HANDLE_VALUE) {
                 DWORD err = GetLastError();
                 if (err != ERROR_FILE_NOT_FOUND)
@@ -637,13 +640,9 @@ uint32_t recursive_count(fs_cpath searchp, fs_error_code *ec)
                 return 0;
         }
 
-        wchar_t _buf[MAX_PATH] = L"";
-        wchar_t *buf = _buf;
-
-        const size_t len = wcslen(searchp) - 2;
-        wcscpy(buf, searchp);
-        buf[len] = '\0'; // remove '\*'
-
+        searchPath[len] = '\0';
+        wchar_t *base = searchPath;
+        uint32_t count = 0;
         do {
                 if (wcscmp(findFileData.cFileName, L".") == 0 || wcscmp(findFileData.cFileName, L"..") == 0)
                         continue;
@@ -651,21 +650,22 @@ uint32_t recursive_count(fs_cpath searchp, fs_error_code *ec)
                 fs_bool isdir = findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY &&
                         !(findFileData.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT);
 
-                path_append_s(&buf, findFileData.cFileName, FS_FALSE);
-                count += isdir ? recursive_count(buf, ec) : 1;
+                if (isdir) // append only if necessary
+                        path_append_s(&base, findFileData.cFileName, FS_FALSE);
+
+                count += isdir ? recursive_count(base, ec) : 1;
                 if (ec->code)
                         return 0;
 
-                buf[len] = '\0';
+                base[len] = '\0';
         } while (FindNextFileW(hFind, &findFileData));
 
-        return count;
+        return 1 /* self */+ count;
 }
 
 uint32_t recursive_entries(fs_cpath p, fs_cpath *buf)
 {
         const size_t len = wcslen(p);
-
         wchar_t searchPath[MAX_PATH] = L"";
         wcscpy(searchPath, p);
         wcscat(searchPath, L"\\*");
@@ -871,7 +871,7 @@ fs_path fs_weakly_canonical(fs_cpath p, fs_error_code *ec)
         fs_path_iter end = fs_path_end(p);
 
         while (iter.pos != end.pos) {
-                tmp = fs_path_append(result, FS_DEREF_ITER(iter));
+                tmp = fs_path_append(result, FS_DEREF_PATH_ITER(iter));
                 if (get_type(tmp, FS_FALSE, ec) != fs_file_type_not_found) {
                         if (ec->code) {
                                 FS_DESTROY_PATH_ITER(iter);
@@ -903,7 +903,7 @@ fs_path fs_weakly_canonical(fs_cpath p, fs_error_code *ec)
         }
 
         while (iter.pos != end.pos) {
-                path_append_s(&result, FS_DEREF_ITER(iter), FS_TRUE);
+                path_append_s(&result, FS_DEREF_PATH_ITER(iter), FS_TRUE);
                 fs_path_iter_next(&iter);
         }
 
@@ -1090,17 +1090,19 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
                         if (ec->code)
                                 return;
 
-                        for (; it.elem; fs_dir_iter_next(&it)) {
-                                fs_path file = fs_path_filename(it.elem);
+                        fs_cpath path = FS_DEREF_DIR_ITER(it);
+                        for (; path; fs_dir_iter_next(&it)) {
+                                fs_path file = fs_path_filename(path);
                                 fs_path dest = fs_path_append(to, file);
                                 free(file);
 
-                                fs_copy_opt(it.elem, dest, options | fs_copy_options_in_recursive_copy, ec);
+                                fs_copy_opt(path, dest, options | fs_copy_options_in_recursive_copy, ec);
                                 free(dest);
 
                                 if (ec->code)
                                         return;
                         }
+                        FS_DESTROY_DIR_ITER(it);
                 }
         }
 }
@@ -1885,7 +1887,7 @@ fs_bool fs_is_empty(fs_cpath p, fs_error_code *ec)
         fs_bool empty;
         if (type == fs_file_type_directory) {
                 fs_dir_iter it = fs_directory_iterator(p, ec);
-                empty = !it.elem;
+                empty = !FS_DEREF_DIR_ITER(it);
                 FS_DESTROY_DIR_ITER(it);
         } else {
                 empty =  fs_file_size(p, ec) != 0;
@@ -2434,7 +2436,7 @@ fs_path_iter fs_path_end(fs_cpath p)
 
 void fs_path_iter_next(fs_path_iter *it)
 {
-        const size_t len = FS_LEN(FS_DEREF_ITER(*it));
+        const size_t len = FS_LEN(FS_DEREF_PATH_ITER(*it));
         FS_CHAR_CIT last = it->begin + FS_LEN(it->begin);
 
         if (it->pos == it->begin) {
@@ -2445,8 +2447,8 @@ void fs_path_iter_next(fs_path_iter *it)
                         ++rtdend;
 
                 if (it->begin != rtnend && rtnend != rtdend) {
-                        free(FS_DEREF_ITER(*it));
-                        FS_DEREF_ITER(*it) = dupe_string(rtnend, rtdend);
+                        free(FS_DEREF_PATH_ITER(*it));
+                        FS_DEREF_PATH_ITER(*it) = dupe_string(rtnend, rtdend);
                         return;
                 }
         } else if (is_separator(*it->pos)) {
@@ -2461,16 +2463,16 @@ void fs_path_iter_next(fs_path_iter *it)
         }
 
         if (it->pos == last) {
-                free(FS_DEREF_ITER(*it));
-                FS_DEREF_ITER(*it) = FS_DUP(FS_PREF(""));
+                free(FS_DEREF_PATH_ITER(*it));
+                FS_DEREF_PATH_ITER(*it) = FS_DUP(FS_PREF(""));
                 return;
         }
 
         while (is_separator(*it->pos)) {
                 if (++it->pos == last) {
                         --it->pos;
-                        free(FS_DEREF_ITER(*it));
-                        FS_DEREF_ITER(*it) = FS_DUP(FS_PREF(""));
+                        free(FS_DEREF_PATH_ITER(*it));
+                        FS_DEREF_PATH_ITER(*it) = FS_DUP(FS_PREF(""));
                         return;
                 }
         }
@@ -2479,8 +2481,8 @@ void fs_path_iter_next(fs_path_iter *it)
         while (*e && !is_separator(*e))
                 ++e;
 
-        free(FS_DEREF_ITER(*it));
-        FS_DEREF_ITER(*it) = dupe_string(it->pos, e);
+        free(FS_DEREF_PATH_ITER(*it));
+        FS_DEREF_PATH_ITER(*it) = dupe_string(it->pos, e);
 }
 
 void fs_path_iter_prev(fs_path_iter *it)
@@ -2496,8 +2498,8 @@ void fs_path_iter_prev(fs_path_iter *it)
         if (rtnend != rtdend && it->pos == rtdend) {
                 it->pos = (fs_path)rtnend;
 
-                free(FS_DEREF_ITER(*it));
-                FS_DEREF_ITER(*it) = dupe_string(rtnend, rtdend);
+                free(FS_DEREF_PATH_ITER(*it));
+                FS_DEREF_PATH_ITER(*it) = dupe_string(rtnend, rtdend);
 
                 return;
         }
@@ -2505,8 +2507,8 @@ void fs_path_iter_prev(fs_path_iter *it)
         if (it->begin != rtnend && it->pos == rtnend) {
                 it->pos = it->begin;
 
-                free(FS_DEREF_ITER(*it));
-                FS_DEREF_ITER(*it) = dupe_string(it->begin, rtnend);
+                free(FS_DEREF_PATH_ITER(*it));
+                FS_DEREF_PATH_ITER(*it) = dupe_string(it->begin, rtnend);
 
                 return;
         }
@@ -2514,8 +2516,8 @@ void fs_path_iter_prev(fs_path_iter *it)
         if (it->pos == last && is_separator(it->pos[-1])) {
                 --it->pos;
 
-                free(FS_DEREF_ITER(*it));
-                FS_DEREF_ITER(*it) = FS_DUP(FS_PREF(""));
+                free(FS_DEREF_PATH_ITER(*it));
+                FS_DEREF_PATH_ITER(*it) = FS_DUP(FS_PREF(""));
 
                 return;
         }
@@ -2527,8 +2529,8 @@ void fs_path_iter_prev(fs_path_iter *it)
         while (rtdend != it->pos && !is_separator(it->pos[-1]))
                 --it->pos;
 
-        free(FS_DEREF_ITER(*it));
-        FS_DEREF_ITER(*it) = dupe_string(it->pos, newEnd);
+        free(FS_DEREF_PATH_ITER(*it));
+        FS_DEREF_PATH_ITER(*it) = dupe_string(it->pos, newEnd);
 }
 
 fs_dir_iter fs_directory_iterator(fs_cpath p, fs_error_code *ec)
@@ -2587,7 +2589,7 @@ fs_dir_iter fs_directory_iterator(fs_cpath p, fs_error_code *ec)
 
         elems[count] = NULL;
         return (fs_dir_iter){
-                .elem = elems[0],
+                .pos = 0,
                 .elems = elems
         };
 #else // _WIN32
@@ -2597,22 +2599,12 @@ fs_dir_iter fs_directory_iterator(fs_cpath p, fs_error_code *ec)
 
 void fs_dir_iter_next(fs_dir_iter *it)
 {
-        // Get the current idx
-        size_t idx = 0;
-        while (it->elem != it->elems[idx])
-                ++idx;
-
-        it->elem = it->elems[++idx];
+        ++it->pos;
 }
 
 void fs_dir_iter_prev(fs_dir_iter *it)
 {
-        // Get the current idx
-        size_t idx = 0;
-        while (it->elem != it->elems[idx])
-                ++idx;
-
-        it->elem = it->elems[--idx];
+        --it->pos;
 }
 
 fs_recursive_dir_iter fs_recursive_directory_iterator(fs_cpath p, fs_error_code *ec)
@@ -2625,10 +2617,6 @@ fs_recursive_dir_iter fs_recursive_directory_iterator(fs_cpath p, fs_error_code 
         fs_cpath *elems;
 
 #ifdef _WIN32
-        wchar_t searchPath[MAX_PATH] = L"";
-        wcscpy(searchPath, p);
-        wcscat(searchPath, L"\\*");
-
         uint32_t count = recursive_count(p, ec);
         if (!count) // both for errors and empty dirs
                 return (fs_dir_iter){};
@@ -2639,7 +2627,7 @@ fs_recursive_dir_iter fs_recursive_directory_iterator(fs_cpath p, fs_error_code 
         count = recursive_entries(p, elems);
         elems[count] = NULL;
         return (fs_dir_iter){
-                .elem = elems[0],
+                .pos = 0,
                 .elems = elems
         };
 #else // _WIN32

@@ -40,12 +40,13 @@ do {                                    \
 
 #define FS_DESTROY_DIR_ITER(it) \
 do {                            \
-        it.elem = NULL;         \
+        it.pos = 0;             \
         free(it.elems);         \
         it.elems = NULL;        \
 } while (FS_FALSE)
 
-#define FS_DEREF_ITER(it) ((it).elem)
+#define FS_DEREF_PATH_ITER(it) ((it).elem)
+#define FS_DEREF_DIR_ITER(it) ((it).elems[(it).pos])
 
 #define FS_RESET_ERROR(pec)                     \
 do {                                            \
@@ -170,7 +171,7 @@ typedef struct fs_path_iter {
 } fs_path_iter;
 
 typedef struct fs_dir_iter {
-        fs_cpath elem;
+        uint32_t pos;
         fs_cpath *elems;
 
 } fs_dir_iter;
