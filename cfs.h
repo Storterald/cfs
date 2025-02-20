@@ -56,7 +56,7 @@ do {                                            \
         (pec)->msg = NULL;                      \
 } while (FS_FALSE)
 
-typedef uint64_t fs_file_time_type;
+typedef uintmax_t fs_file_time_type;
 typedef FS_CHAR *fs_path;
 typedef const FS_CHAR *fs_cpath;
 
@@ -81,27 +81,27 @@ typedef enum fs_file_type {
 typedef enum fs_perms {
         fs_perms_none = 0000,
 
-        fs_perms_owner_read = 0400,
+        fs_perms_owner_read  = 0400,
         fs_perms_owner_write = 0200,
-        fs_perms_owner_exec = 0100,
-        fs_perms_owner_all = 0700,
+        fs_perms_owner_exec  = 0100,
+        fs_perms_owner_all   = 0700,
 
-        fs_perms_group_read = 040,
+        fs_perms_group_read  = 040,
         fs_perms_group_write = 020,
-        fs_perms_group_exec = 010,
-        fs_perms_group_all = 070,
+        fs_perms_group_exec  = 010,
+        fs_perms_group_all   = 070,
 
-        fs_perms_other_read = 04,
+        fs_perms_other_read  = 04,
         fs_perms_other_write = 02,
-        fs_perms_other_exec = 01,
-        fs_perms_other_all = 07,
+        fs_perms_other_exec  = 01,
+        fs_perms_other_all   = 07,
 
-        fs_perms_all = 0777,
-        fs_perms_set_uid = 04000,
-        fs_perms_set_gid = 02000,
+        fs_perms_all        = 0777,
+        fs_perms_set_uid    = 04000,
+        fs_perms_set_gid    = 02000,
         fs_perms_sticky_bit = 01000,
-        fs_perms_mask = 07777,
-        fs_perms_unknown = 0xFFFF,
+        fs_perms_mask       = 07777,
+        fs_perms_unknown    = 0xFFFF,
 
         _fs_perms_All_write = fs_perms_owner_write | fs_perms_group_write | fs_perms_other_write,
         _fs_perms_File_attribute_readonly =
@@ -120,23 +120,30 @@ typedef enum fs_perm_options {
 typedef enum fs_copy_options {
         fs_copy_options_none = 0x0,
 
-        _fs_copy_Existing_mask = 0xF,
-        fs_copy_options_skip_existing = 0x1,
+        _fs_copy_Existing_mask             = 0xF,
+        fs_copy_options_skip_existing      = 0x1,
         fs_copy_options_overwrite_existing = 0x2,
-        fs_copy_options_update_existing = 0x4,
+        fs_copy_options_update_existing    = 0x4,
 
         fs_copy_options_recursive = 0x10,
 
-        _fs_copy_Symlinks_mask = 0xF00,
+        _fs_copy_Symlinks_mask        = 0xF00,
         fs_copy_options_copy_symlinks = 0x100,
         fs_copy_options_skip_symlinks = 0x200,
 
-        _fs_copy_Copy_form_mask = 0xF000,
-        fs_copy_options_directories_only = 0x1000,
-        fs_copy_options_create_symlinks = 0x2000,
+        _fs_copy_Copy_form_mask           = 0xF000,
+        fs_copy_options_directories_only  = 0x1000,
+        fs_copy_options_create_symlinks   = 0x2000,
         fs_copy_options_create_hard_links = 0x4000
 
 } fs_copy_options;
+
+typedef enum fs_directory_options {
+        fs_directory_options_none                     = 0,
+        fs_directory_options_follow_directory_symlink = 1,
+        fs_directory_options_skip_permission_denied   = 2
+
+} fs_directory_options;
 
 typedef enum fs_error_type {
         fs_error_type_unknown,
@@ -368,6 +375,8 @@ void fs_dir_iter_next(fs_dir_iter *it);
 void fs_dir_iter_prev(fs_dir_iter *it);
 
 fs_recursive_dir_iter fs_recursive_directory_iterator(fs_cpath p, fs_error_code *ec);
+
+fs_recursive_dir_iter fs_recursive_directory_iterator_opt(fs_cpath p, fs_directory_options options, fs_error_code *ec);
 
 void fs_recursive_dir_iter_next(fs_recursive_dir_iter *it);
 
