@@ -172,21 +172,22 @@ char *fs_error_string(fs_error_type type, uint32_t e)
                 }
         }
         case fs_error_type_system: {
+                const char pref[] = "cfs error: system error: ";
 #ifdef _WIN32
                 LPVOID msgBuffer;
                 FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
                         NULL, e, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
                         (LPSTR)&msgBuffer, 0, NULL);
 
-                char *msg = strdup((char *)msgBuffer);
-                LocalFree(msgBuffer);
+                char *msg = malloc(sizeof(pref) + strlen((char *)msgBuffer));
+                strcpy(msg, pref);
+                strcat(msg, (char *)msgBuffer);
 
+                LocalFree(msgBuffer);
                 return msg;
 #else // _WIN32
 #endif // _WIN32
         }}
-
-        return NULL;
 }
 
 fs_path dupe_string(fs_cpath first, fs_cpath last)
