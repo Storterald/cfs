@@ -54,9 +54,9 @@ fs_bool fs_path_has_##what(fs_cpath p)                  \
 #include <aclapi.h>
 #include <shlobj.h>
 
-#define FS_MAX_PATH (MAX_PATH) // used outside OS specific blocks
+#define FS_MAX_PATH MAX_PATH // used outside OS specific blocks
 #else // _WIN32
-#define FS_MAX_PATH (PATH_MAX) // used outside OS specific blocks
+#define FS_MAX_PATH PATH_MAX // used outside OS specific blocks
 #endif // _WIN32
 
 #ifdef _WIN32
@@ -153,9 +153,7 @@ char *fs_error_string(fs_error_type type, uint32_t e)
 {
         switch (type) {
         case fs_error_type_unknown: {
-                char *const buf = malloc(64);
-                sprintf(buf, "Unknown error: %u", e);
-                return buf;
+                break;
         }
         case fs_error_type_filesystem: {
                 switch((_fs_err)e) {
@@ -170,6 +168,8 @@ char *fs_error_string(fs_error_type type, uint32_t e)
                 case _fs_err_is_a_directory:
                         return strdup("cfs error: item is a directory");
                 }
+
+                break; // Safety if there is a missing case above
         }
         case fs_error_type_system: {
                 const char pref[] = "cfs error: system error: ";
@@ -186,8 +186,13 @@ char *fs_error_string(fs_error_type type, uint32_t e)
                 LocalFree(msgBuffer);
                 return msg;
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
         }}
+
+        char *const buf = malloc(64);
+        sprintf(buf, "Unknown error: %u", e);
+        return buf;
 }
 
 fs_path dupe_string(fs_cpath first, fs_cpath last)
@@ -225,13 +230,13 @@ fs_path read_symlink_unchecked(fs_cpath p, fs_error_code *ec)
 
         CloseHandle(hFile);
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
 
         return FS_DUP(resolved);
 }
 #endif // FS_SYMLINKS_SUPPORTED
 
-#define get_type_remove_archive_mask (~FILE_ATTRIBUTE_ARCHIVE)
 fs_file_type get_type(fs_cpath p, fs_bool follow_symlink, fs_error_code *ec)
 {
 #ifdef _WIN32
@@ -249,7 +254,7 @@ fs_file_type get_type(fs_cpath p, fs_bool follow_symlink, fs_error_code *ec)
                 return fs_file_type_not_found;
 
         // https://stackoverflow.com/questions/43895795/all-files-has-file-attribute-archive-attribute
-        fileInfo.dwFileAttributes &= get_type_remove_archive_mask;
+        fileInfo.dwFileAttributes &= (~FILE_ATTRIBUTE_ARCHIVE);
 
         HANDLE hnd = CreateFileW(p, 0, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
         if (hnd == INVALID_HANDLE_VALUE) {
@@ -274,7 +279,7 @@ fs_file_type get_type(fs_cpath p, fs_bool follow_symlink, fs_error_code *ec)
                                 return fs_file_junction;
                         }
                 }
-
+#ifdef FS_SYMLINKS_SUPPORTED
                 if (!follow_symlink)
                         return fs_file_type_symlink;
 
@@ -286,6 +291,10 @@ fs_file_type get_type(fs_cpath p, fs_bool follow_symlink, fs_error_code *ec)
                 free(resolved);
 
                 return type;
+#else // FS_SYMLINKS_SUPPORTED
+                // Should never happen, a junction must be mapped to a directory
+                return fs_file_type_none;
+#endif // FS_SYMLINKS_SUPPORTED
         }
 
         if (fileInfo.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
@@ -305,9 +314,9 @@ fs_file_type get_type(fs_cpath p, fs_bool follow_symlink, fs_error_code *ec)
                         return fs_file_type_unknown;
         }
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
 }
-#undef get_type_remove_archive_mask
 
 fs_perms get_perms(fs_cpath p, fs_error_code *ec)
 {
@@ -401,6 +410,7 @@ fs_perms get_perms(fs_cpath p, fs_error_code *ec)
         LocalFree(pSD);
         return perms;
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
 }
 
@@ -412,8 +422,6 @@ fs_bool is_separator(FS_CHAR c)
         return c == '/';
 #endif // _WIN32
 }
-
-#ifdef _WIN32
 
 static void path_append_s(fs_path *pp, fs_cpath other, fs_bool realloc)
 {
@@ -476,8 +484,11 @@ static void path_append_s(fs_path *pp, fs_cpath other, fs_bool realloc)
                 *pp = newp;
         }
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
 }
+
+#ifdef _WIN32
 
 fs_bool is_drive(fs_cpath p)
 {
@@ -548,6 +559,7 @@ FS_CHAR_CIT find_root_name_end(fs_cpath p)
         }
 
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
         return p;
 }
@@ -598,6 +610,7 @@ FS_CHAR_CIT find_extension(fs_cpath p, FS_CHAR_CIT ads)
 }
 
 #ifdef _WIN32
+
 DWORD map_perms(fs_perms perms)
 {
         DWORD access = 0;
@@ -681,6 +694,7 @@ uint32_t recursive_entries(fs_cpath p, fs_cpath *buf)
 
         return idx;
 }
+
 #endif // _WIN32
 
 fs_path fs_absolute(fs_cpath p, fs_error_code *ec)
@@ -700,17 +714,17 @@ fs_path fs_absolute(fs_cpath p, fs_error_code *ec)
 
         if (fs_path_has_root_directory(p)) {
                 size_t pos = 0;
-                while (is_separator(p[pos])) // find_first_not_of
+                while (p[pos] && is_separator(p[pos])) // find_first_not_of
                         ++pos;
 
                 const size_t slen = wcslen(s);
                 s += min(slen, pos) - 1;
         }
 
-        FS_STACK_PATH_DECLARATION(b);
+        FS_STACK_PATH_DECLARATION(stackb);
 
         uint32_t len = MAX_PATH;
-        wchar_t *buf = b;
+        wchar_t *buf = stackb;
         for (;;) {
                 DWORD req = GetFullPathNameW(s, len, buf, NULL);
                 if (req == 0) {
@@ -721,7 +735,7 @@ fs_path fs_absolute(fs_cpath p, fs_error_code *ec)
                 if (req < len) // Path has been saved correctly
                         break;
 
-                if (buf != b) // Should never happen
+                if (buf != stackb) // Should never happen
                         free(buf);
 
                 // Allocate a big enough buffer.
@@ -729,7 +743,7 @@ fs_path fs_absolute(fs_cpath p, fs_error_code *ec)
                 len = req;
         }
 
-        if (buf == b)
+        if (buf == stackb)
                 return wcsdup(buf);
 
         return buf;
@@ -746,23 +760,16 @@ fs_path fs_absolute(fs_cpath p, fs_error_code *ec)
 fs_path fs_canonical(fs_cpath p, fs_error_code *ec)
 {
         FS_PREPARE_ERROR_CODE(ec);
+        FS_STACK_PATH_DECLARATION(stackb);
 
-        fs_path abs;
-#ifdef _WIN32
-        fs_path norm = fs_path_lexically_normal(p);
-        abs = fs_absolute(norm, ec);
-        free(norm);
-#else // _WIN32
-        abs = fs_absolute(p, ec);
-#endif // _WIN32
-        if (ec->code)
-                return abs;
-
-        FS_STACK_PATH_DECLARATION(result);
+        if (p[0] == '\0')
+                return FS_DUP(p);
 
 #ifdef _WIN32
         _fs_path_kind nameKind = _fs_path_kind_Dos;
 
+        // HANDLE not needed by GetFullPathNameW
+#ifdef FS_SYMLINKS_SUPPORTED
         HANDLE hFile = CreateFileW(p, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
         if (hFile == INVALID_HANDLE_VALUE) {
                 const DWORD err = GetLastError();
@@ -773,52 +780,78 @@ fs_path fs_canonical(fs_cpath p, fs_error_code *ec)
 
                 return NULL;
         }
+#endif // FS_SYMLINKS_SUPPORTED
 
+        DWORD len = MAX_PATH;
+        wchar_t *buf = stackb;
         for (;;) {
-                DWORD size = GetFinalPathNameByHandleW(hFile, result, MAX_PATH, nameKind);
-                if (size == 0) {
+                // Use GetFinalPathNameByHandleW after Windows Vista
+                // to resolve symlinks.
+#ifdef FS_SYMLINKS_SUPPORTED
+                DWORD req = GetFinalPathNameByHandleW(hFile, buf, MAX_PATH, nameKind);
+#else // FS_SYMLINKS_SUPPORTED
+                DWORD req = GetFullPathNameW(p, len, buf, NULL);
+#endif // FS_SYMLINKS_SUPPORTED
+
+                if (req == 0) {
                         const DWORD err = GetLastError();
                         if (err == ERROR_PATH_NOT_FOUND && nameKind == _fs_path_kind_Dos) {
                                 nameKind = _fs_path_kind_Nt;
                                 continue;
                         }
 
-                        FS_SYSTEM_ERROR(ec, err);
-
+#ifdef FS_SYMLINKS_SUPPORTED
                         CloseHandle(hFile);
+#endif // #ifdef FS_SYMLINKS_SUPPORTED 
+
+                        FS_SYSTEM_ERROR(ec, err);
                         return NULL;
                 }
 
-                result[size] = '\0';
-                if (size < MAX_PATH)
+                if (req <= len)
                         break;
+                
+                if (buf != stackb)
+                        free(buf);
+
+                buf = malloc(req * sizeof(wchar_t));
         }
+
+#ifdef FS_SYMLINKS_SUPPORTED
         CloseHandle(hFile);
+#endif // #ifdef FS_SYMLINKS_SUPPORTED
 
         if (nameKind == _fs_path_kind_Dos) {
-                wchar_t *output = result;
+                wchar_t *output = buf;
 
-                if (is_drive_prefix_with_slash_slash_question(result)) {
+                if (is_drive_prefix_with_slash_slash_question(buf)) {
                         output += 4;
-                } else if (wcsncmp(result, LR"(\\?\UNC\)", 8) == 0) {
+                } else if (wcsncmp(buf, LR"(\\?\UNC\)", 8) == 0) {
                         output[6] = L'\\';
                         output[7] = L'\\';
                         output += 6;
                 }
 
-                return FS_DUP(output);
+                output = wcsdup(output);
+                if (buf != stackb)
+                        free(buf);
+                
+                return output;
         } else {
                 const wchar_t ntPref[] = LR"(\\?\GLOBALROOT)";
-                // Keep the '\0' char as wcslen(result) doesn't account for it.
+                // Keep the '\0' char as wcslen(buf) doesn't account for it.
                 const size_t extraLen = sizeof(ntPref) / sizeof(wchar_t);
 
-                wchar_t *out = malloc((extraLen + wcslen(result)) * sizeof(FS_CHAR));
+                wchar_t *out = malloc((extraLen + wcslen(buf)) * sizeof(FS_CHAR));
                 memcpy(out, ntPref, sizeof(ntPref));
-                wcscat(out, result);
+                wcscat(out, buf);
 
+                if (buf != stackb)
+                        free(buf);
                 return out;
         }
 #else  // _WIN32
+#error "not implemented"
 #endif // _WIN32
 }
 
@@ -848,7 +881,7 @@ fs_path fs_weakly_canonical(fs_cpath p, fs_error_code *ec)
 
                         fs_path save = result;
                         result = tmp;
-                        tmp = result;
+                        tmp = save;
                 } else {
                         break;
                 }
@@ -997,7 +1030,8 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
                 }
         }
 
-        if (fs_is_other_s((fs_file_status){ftype}) || fs_is_other_s((fs_file_status){ttype})) {
+        if (fs_is_other_s((fs_file_status){ftype, fs_perms_unknown})
+            || fs_is_other_s((fs_file_status){ttype, fs_perms_unknown})) {
                 FS_FILESYSTEM_ERROR(ec, _fs_err_invalid_argument);
                 return;
         }
@@ -1089,7 +1123,10 @@ void fs_copy_file_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_er
         if (ec->code)
                 return;
 
+        // always false when symlinks are not supported.
         fs_bool freeFrom = FS_FALSE;
+
+#ifdef FS_SYMLINKS_SUPPORTED 
         if (ftype == fs_file_type_symlink) {
                 freeFrom = FS_TRUE;
 
@@ -1101,6 +1138,7 @@ void fs_copy_file_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_er
                 if (ec->code)
                         goto clean;
         }
+#endif // FS_SYMLINKS_SUPPORTED
 
         if (ftype != fs_file_type_regular) {
                 FS_FILESYSTEM_ERROR(ec, _fs_err_invalid_argument);
@@ -1150,6 +1188,7 @@ copy_file:
         if (!CopyFileW(from, to, FALSE))
                 FS_SYSTEM_ERROR(ec, GetLastError());
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
 
 clean:
@@ -1179,6 +1218,7 @@ fs_bool fs_create_directory(fs_cpath p, fs_error_code *ec)
                 return FS_FALSE;
         }
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
 
         return FS_TRUE;
@@ -1194,6 +1234,7 @@ fs_bool fs_create_directory_cp(fs_cpath p, fs_cpath existing_p, fs_error_code *e
                 return FS_FALSE;
         }
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
 
         return FS_TRUE;
@@ -1210,6 +1251,7 @@ fs_bool fs_create_directories(fs_cpath p, fs_error_code *ec)
                 return FS_FALSE;
         }
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
 
         return FS_TRUE;
@@ -1223,6 +1265,7 @@ void fs_create_hard_link(fs_cpath target, fs_cpath link, fs_error_code *ec)
         if (!CreateHardLinkW(link, target, NULL))
                 FS_SYSTEM_ERROR(ec, GetLastError());
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
 }
 
@@ -1230,23 +1273,33 @@ void fs_create_symlink(fs_cpath target, fs_cpath link, fs_error_code *ec)
 {
         FS_PREPARE_ERROR_CODE(ec);
 
+#ifdef FS_SYMLINKS_SUPPORTED
 #ifdef _WIN32
         DWORD attrTarget = GetFileAttributesW(target);
 
         if (!CreateSymbolicLinkW(link, target, attrTarget == FILE_ATTRIBUTE_DIRECTORY))
                 FS_SYSTEM_ERROR(ec, GetLastError());
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
+#else // FS_SYMLINKS_SUPPORTED
+        FS_FILESYSTEM_ERROR(ec, _fs_err_function_not_supported);
+#endif // FS_SYMLINKS_SUPPORTED
 }
 
 void fs_create_directory_symlink(fs_cpath target, fs_cpath link, fs_error_code *ec)
 {
         FS_PREPARE_ERROR_CODE(ec);
 
+#ifdef FS_SYMLINKS_SUPPORTED
 #ifdef _WIN32
         return fs_create_symlink(target, link, ec);
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
+#else // FS_SYMLINKS_SUPPORTED
+        FS_FILESYSTEM_ERROR(ec, _fs_err_function_not_supported);
+#endif // FS_SYMLINKS_SUPPORTED
 }
 
 fs_path fs_current_path(fs_error_code *ec)
@@ -1260,6 +1313,7 @@ fs_path fs_current_path(fs_error_code *ec)
                 return NULL;
         }
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
 
         return FS_DUP(cwd);
@@ -1273,6 +1327,7 @@ void fs_current_path_ch(fs_cpath p, fs_error_code *ec)
         if (!SetCurrentDirectoryW(p))
                 FS_SYSTEM_ERROR(ec, GetLastError());
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
 }
 
@@ -1285,7 +1340,7 @@ fs_bool fs_exists(fs_cpath p, fs_error_code *ec)
 {
         FS_PREPARE_ERROR_CODE(ec);
         fs_file_type type = get_type(p, FS_FALSE, ec);
-        return fs_exists_s((fs_file_status){type}) && !ec->code;
+        return fs_exists_s((fs_file_status){type, fs_perms_unknown}) && !ec->code;
 }
 
 fs_bool fs_equivalent(fs_cpath p1, fs_cpath p2, fs_error_code *ec)
@@ -1306,6 +1361,7 @@ fs_bool fs_equivalent(fs_cpath p1, fs_cpath p2, fs_error_code *ec)
 #ifdef _WIN32
         equivalent = wcscmp(cn1, cn2) == 0;
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
 
         free(cn1);
@@ -1335,6 +1391,7 @@ uintmax_t fs_file_size(fs_cpath p, fs_error_code *ec)
         CloseHandle(hFile);
         return (uintmax_t)fileSize.QuadPart;
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
 }
 
@@ -1358,6 +1415,7 @@ uintmax_t fs_hard_link_count(fs_cpath p, fs_error_code *ec)
 
         return fInfo.nNumberOfLinks - 1;
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
 }
 
@@ -1388,6 +1446,7 @@ fs_file_time_type fs_last_write_time(fs_cpath p, fs_error_code *ec)
         CloseHandle(hFile);
         return time;
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
 }
 
@@ -1415,6 +1474,7 @@ void fs_last_write_time_wr(fs_cpath p, fs_file_time_type new_time, fs_error_code
 
         CloseHandle(hFile);
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
 }
 
@@ -1523,6 +1583,7 @@ void fs_permission_opt(fs_cpath p, fs_perms prms, fs_perm_options opts, fs_error
         LocalFree(pNewDACL);
         FreeSid(pEveryoneSID);
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
 }
 
@@ -1540,8 +1601,8 @@ fs_path fs_read_symlink(fs_cpath p, fs_error_code *ec)
 
         return read_symlink_unchecked(p, ec);
 #else // FS_SYMLINKS_SUPPORTED
-        FS_FILESYSTEM_ERROR(ec, FS_FUNCTION_NOT_SUPPORTED);
-        return NULL
+        FS_FILESYSTEM_ERROR(ec, _fs_err_function_not_supported);
+        return NULL;
 #endif // FS_SYMLINKS_SUPPORTED
 }
 
@@ -1559,6 +1620,7 @@ fs_bool fs_remove(fs_cpath p, fs_error_code *ec)
         } else if (fs_status_known(status))
                 FS_PREPARE_ERROR_CODE(ec);
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
 
         return FS_FALSE;
@@ -1600,6 +1662,7 @@ uintmax_t fs_remove_all(fs_cpath p, fs_error_code *ec)
                 }
         } while (FindNextFileW(hFind, &findFileData));
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
 
         return count;
@@ -1613,6 +1676,7 @@ void fs_rename(fs_cpath old_p, fs_cpath new_p, fs_error_code *ec)
         if (!MoveFileW(old_p, new_p))
                 FS_SYSTEM_ERROR(ec, GetLastError());
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
 }
 
@@ -1681,6 +1745,7 @@ void fs_resize_file(fs_cpath p, uintmax_t size, fs_error_code *ec)
 
         CloseHandle(hFile);
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
 }
 
@@ -1724,6 +1789,7 @@ fs_space_info fs_space(fs_cpath p, fs_error_code *ec)
         spaceInfo.available = (uintmax_t)info.available;
         free(rootPath);
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
 
         return spaceInfo;
@@ -1731,6 +1797,7 @@ fs_space_info fs_space(fs_cpath p, fs_error_code *ec)
 
 fs_file_status fs_status(fs_cpath p, fs_error_code *ec)
 {
+#ifdef FS_SYMLINKS_SUPPORTED
         FS_PREPARE_ERROR_CODE(ec);
 
         fs_file_status status = {
@@ -1753,6 +1820,9 @@ fs_file_status fs_status(fs_cpath p, fs_error_code *ec)
         }
 
         return status;
+#else // FS_SYMLINKS_SUPPORTED
+        return fs_symlink_status(p, ec);
+#endif // FS_SYMLINKS_SUPPORTED
 }
 
 fs_file_status fs_symlink_status(fs_cpath p, fs_error_code *ec)
@@ -1780,6 +1850,7 @@ fs_path fs_temp_directory_path(fs_error_code *ec)
 #ifdef _WIN32
         GetTempPathW(MAX_PATH, tmp);
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
 
         return FS_DUP(tmp);
@@ -1811,12 +1882,8 @@ fs_bool fs_is_empty(fs_cpath p, fs_error_code *ec)
         if (ec->code)
                 return FS_FALSE;
 
-        fs_bool isdir = fs_is_directory(p, ec);
-        if (ec->code)
-                return FS_FALSE;
-
         fs_bool empty;
-        if (isdir) {
+        if (type == fs_file_type_directory) {
                 fs_dir_iter it = fs_directory_iterator(p, ec);
                 empty = !it.elem;
                 FS_DESTROY_DIR_ITER(it);
@@ -2034,6 +2101,7 @@ fs_path fs_path_lexically_normal(fs_cpath p)
                 if (norm[i] == L'/')
                         norm[i] = L'\\';
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
         }
 
@@ -2314,6 +2382,7 @@ fs_bool fs_path_is_absolute(fs_cpath p)
 
         return p != find_root_name_end(p);
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
 }
 
@@ -2324,7 +2393,6 @@ fs_bool fs_path_is_relative(fs_cpath p)
 
 fs_path_iter fs_path_begin(fs_cpath p)
 {
-        const size_t len = FS_LEN(p);
         FS_CHAR_CIT rtnend = find_root_name_end(p);
 
         FS_CHAR_CIT fend;
@@ -2523,6 +2591,7 @@ fs_dir_iter fs_directory_iterator(fs_cpath p, fs_error_code *ec)
                 .elems = elems
         };
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
 };
 
@@ -2574,6 +2643,7 @@ fs_recursive_dir_iter fs_recursive_directory_iterator(fs_cpath p, fs_error_code 
                 .elems = elems
         };
 #else // _WIN32
+#error "not implemented"
 #endif // _WIN32
 }
 
