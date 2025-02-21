@@ -52,6 +52,15 @@
       }
     },
     {
+      "name": "gcc-test-release",
+      "displayName": "GCC Test Release",
+      "inherits": "gcc",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTS": "ON"
+      }
+    },
+    {
       "name": "gcc-release",
       "displayName": "GCC Release",
       "inherits": "gcc",
@@ -64,7 +73,13 @@
     {
       "name": "gcc-test-build",
       "displayName": "GCC Test",
-      "configuration": "Test",
+      "configuration": "Debug",
+      "configurePreset": "gcc-test"
+    },
+    {
+      "name": "gcc-test-release-build",
+      "displayName": "GCC Test Release",
+      "configuration": "Release",
       "configurePreset": "gcc-test"
     },
     {

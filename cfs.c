@@ -2533,11 +2533,8 @@ fs_path fs_path_lexically_relative(fs_cpath p, fs_cpath base)
 
         const FS_CHAR dot[2] = FS_PREF(".");
         const FS_CHAR dotDot[3] = FS_PREF("..");
+        fs_path result;
 
-        // LWG-3699: `lexically_relative` on UNC drive paths (`\\?\C:\...`)
-        // results in a default-constructed value This avoids doing any
-        // unnecessary copies; the return value of `relative_path()` is
-        // lifetime-extended if necessary.
         const fs_bool bothUNC =
                 is_drive_prefix_with_slash_slash_question(p) &&
                 is_drive_prefix_with_slash_slash_question(base);
@@ -2550,56 +2547,75 @@ fs_path fs_path_lexically_relative(fs_cpath p, fs_cpath base)
         if (FS_CMP(prt, basert) != 0 || fs_path_is_absolute(p) != fs_path_is_absolute(base) ||
             (!fs_path_has_root_directory(p) && fs_path_has_root_directory(base)) ||
             (relative_path_contains_root_name(p) || relative_path_contains_root_name(base))) {
-                return FS_DUP(FS_PREF(""));
+                result = FS_DUP(FS_PREF(""));
+                goto clean;
         }
 
-        FS_CHAR_IT itA = (FS_CHAR_IT)p;
-        FS_CHAR_IT itB = (FS_CHAR_IT)base;
-        while (*itA && *itB && *itA == *itB) {
-                ++itA;
-                ++itB;
+        // get first mismatch
+        fs_path_iter itA = fs_path_begin(p);
+        fs_path_iter itB = fs_path_begin(base);
+        while (FS_DEREF_PATH_ITER(itA) && FS_DEREF_PATH_ITER(itB)
+                && wcscmp(FS_DEREF_PATH_ITER(itA), FS_DEREF_PATH_ITER(itB)) == 0) {
+                fs_path_iter_next(&itA);
+                fs_path_iter_next(&itB);
         }
 
-        FS_CHAR_CIT plast = p + FS_LEN(p);
-        FS_CHAR_CIT blast = base + FS_LEN(base);
-        if (itA == plast && itB == blast)
-                return FS_DUP(dot);
+        fs_path_iter pend = fs_path_end(p);
+        fs_path_iter bend = fs_path_end(base);
+        if (itA.pos == pend.pos && itB.pos == bend.pos) {
+                result = FS_DUP(dot);
+                goto clean;
+        }
 
         // Skip root-name and root-directory elements, N4950 [fs.path.itr]/4.1, 4.2
-        ptrdiff_t distB = itB - base;
-        const ptrdiff_t distBrt = (ptrdiff_t)(fs_path_has_root_name(base)) + (ptrdiff_t)(fs_path_has_root_directory(base));
+        ptrdiff_t distB = itB.pos - base;
+        const ptrdiff_t distBrt = (ptrdiff_t)(fs_path_has_root_name(base))
+                + (ptrdiff_t)(fs_path_has_root_directory(base));
 
         while (distB < distBrt) {
-                ++itB;
+                fs_path_iter_next(&itB);
                 ++distB;
         }
 
         ptrdiff_t num = 0;
-        for (; itB != blast; ++itB) {
-                FS_CHAR_CIT e = itB;
+        for (; itB.pos != bend.pos; fs_path_iter_next(&itB)) {
+                fs_cpath e = itB.elem;
 
-                if (*e == FS_PREF('\0') || FS_CMP(e, dot) == 0) {
-                        // skip empty element, N4950 [fs.path.itr]/4.4
-                } else if (FS_CMP(e, dotDot) == 0) {
+                if (*e == FS_PREF('\0') || FS_CMP(e, dot) == 0)
+                        ; // skip empty element
+                else if (FS_CMP(e, dotDot) == 0)
                         --num;
-                } else {
+                else
                         ++num;
-                }
         }
 
-        if (num < 0)
-                return FS_DUP(FS_PREF(""));
+        if (num < 0) {
+                result = FS_DUP(FS_PREF(""));
+                goto clean;
+        }
 
-        if (num == 0 && (itA == plast || *itA == '\0'))
-                return FS_DUP(dot);
+        if (num == 0 && (itA.pos == pend.pos || *FS_DEREF_PATH_ITER(itA) == '\0')) {
+                result = FS_DUP(dot);
+                goto clean;
+        }
 
-        fs_path result = FS_DUP(FS_PREF(""));
+        result = FS_DUP(FS_PREF(""));
         for (; num > 0; --num)
                 path_append_s(&result, dotDot, FS_TRUE);
 
-        for (; itA != plast; ++itA)
-                path_append_s(&result, itA, FS_TRUE);
+        for (; itA.pos != pend.pos; fs_path_iter_next(&itA))
+                path_append_s(&result, FS_DEREF_PATH_ITER(itA), FS_TRUE);
 
+clean:
+        if (bothUNC) {
+                free((fs_path)p);
+                free((fs_path)base);
+        }
+
+        FS_DESTROY_PATH_ITER(itA);
+        FS_DESTROY_PATH_ITER(itB);
+        FS_DESTROY_PATH_ITER(pend);
+        FS_DESTROY_PATH_ITER(bend);
         return result;
 }
 
