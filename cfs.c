@@ -154,19 +154,18 @@ static fs_perms get_perms(fs_cpath p, fs_error_code *ec);
 
 static inline fs_bool is_separator(FS_CHAR c);
 static void path_append_s(fs_path *pp, fs_cpath other, fs_bool realloc);
+
 #ifdef _WIN32
 static inline fs_bool is_drive(fs_cpath p);
 static inline fs_bool has_drive(fs_cpath p);
 static inline fs_bool is_drive_prefix_with_slash_slash_question(fs_cpath p);
 static inline fs_bool relative_path_contains_root_name(fs_cpath p);
-#endif // _WIN32
 
 static FS_CHAR_CIT find_root_name_end(fs_cpath p);
 static FS_CHAR_CIT find_relative_path(fs_cpath p);
 static FS_CHAR_CIT find_filename(fs_cpath p);
 static FS_CHAR_CIT find_extension(fs_cpath p, FS_CHAR_CIT ads);
 
-#ifdef _WIN32
 static DWORD map_perms(fs_perms perms);
 static uint32_t recursive_count(fs_cpath p, fs_bool follow_symlinks, fs_error_code *ec);
 static uint32_t recursive_entries(fs_cpath p, fs_bool follow_symlinks, fs_cpath *buf, fs_error_code *ec);
@@ -557,8 +556,6 @@ fs_bool relative_path_contains_root_name(fs_cpath p)
         return FS_FALSE;
 }
 
-#endif // _WIN32
-
 FS_CHAR_CIT find_root_name_end(fs_cpath p)
 {
 #ifdef _WIN32
@@ -635,8 +632,6 @@ FS_CHAR_CIT find_extension(fs_cpath p, FS_CHAR_CIT ads)
 
         return ads;
 }
-
-#ifdef _WIN32
 
 DWORD map_perms(fs_perms perms)
 {
@@ -2420,17 +2415,19 @@ fs_path fs_path_lexically_normal(fs_cpath p)
 #endif // _WIN32
         }
 
+        uint32_t sepcount = 0; // saved for later
+        for (uint32_t i = 0; i < p[i]; i++)
+                sepcount += is_separator(p[i]);
+
+        if (!sepcount)
+                return FS_DUP(p);
+
         typedef struct {
                 FS_CHAR_CIT it;
                 uint32_t count;
         } fs_view;
 
-        uint32_t sepcount = 0; // saved for later
-        for (uint32_t i=0; i < p[i]; i++)
-                sepcount += is_separator(p[i]);
-
-        const size_t vecSize = sepcount * 2;
-        fs_view *const vec = calloc(vecSize, sizeof(fs_view));
+        fs_view *const vec = calloc(sepcount * 2, sizeof(fs_view));
         uint32_t vecIdx = 0; // can be used as a size if vec[vecIdx++] is used.
 
         fs_bool hasrtdir = FS_FALSE; // true: there is a slash right after root-name.
@@ -2533,7 +2530,7 @@ fs_path fs_path_lexically_relative(fs_cpath p, fs_cpath base)
 
         const FS_CHAR dot[2] = FS_PREF(".");
         const FS_CHAR dotDot[3] = FS_PREF("..");
-        fs_path result;
+        fs_path result = FS_PREF("");
 
         const fs_bool bothUNC =
                 is_drive_prefix_with_slash_slash_question(p) &&
@@ -2548,7 +2545,7 @@ fs_path fs_path_lexically_relative(fs_cpath p, fs_cpath base)
             (!fs_path_has_root_directory(p) && fs_path_has_root_directory(base)) ||
             (relative_path_contains_root_name(p) || relative_path_contains_root_name(base))) {
                 result = FS_DUP(FS_PREF(""));
-                goto clean;
+                goto freeUNC;
         }
 
         // get first mismatch
@@ -2564,7 +2561,7 @@ fs_path fs_path_lexically_relative(fs_cpath p, fs_cpath base)
         fs_path_iter bend = fs_path_end(base);
         if (itA.pos == pend.pos && itB.pos == bend.pos) {
                 result = FS_DUP(dot);
-                goto clean;
+                goto cleanIters;
         }
 
         // Skip root-name and root-directory elements, N4950 [fs.path.itr]/4.1, 4.2
@@ -2591,12 +2588,12 @@ fs_path fs_path_lexically_relative(fs_cpath p, fs_cpath base)
 
         if (num < 0) {
                 result = FS_DUP(FS_PREF(""));
-                goto clean;
+                goto cleanIters;
         }
 
         if (num == 0 && (itA.pos == pend.pos || *FS_DEREF_PATH_ITER(itA) == '\0')) {
                 result = FS_DUP(dot);
-                goto clean;
+                goto cleanIters;
         }
 
         result = FS_DUP(FS_PREF(""));
@@ -2606,23 +2603,24 @@ fs_path fs_path_lexically_relative(fs_cpath p, fs_cpath base)
         for (; itA.pos != pend.pos; fs_path_iter_next(&itA))
                 path_append_s(&result, FS_DEREF_PATH_ITER(itA), FS_TRUE);
 
-clean:
-        if (bothUNC) {
-                free((fs_path)p);
-                free((fs_path)base);
-        }
-
+cleanIters:
         FS_DESTROY_PATH_ITER(itA);
         FS_DESTROY_PATH_ITER(itB);
         FS_DESTROY_PATH_ITER(pend);
         FS_DESTROY_PATH_ITER(bend);
+
+freeUNC:
+        if (bothUNC) {
+                free((fs_path)p);
+                free((fs_path)base);
+        }
         return result;
 }
 
 fs_path fs_path_lexically_proximate(fs_cpath p, fs_cpath base)
 {
         fs_path rel = fs_path_lexically_relative(p, base);
-        if (p[0] != FS_PREF('\0'))
+        if (rel[0] != FS_PREF('\0'))
                 return rel;
 
         free(rel);

@@ -1,12 +1,12 @@
 #ifndef FILESYSTEM_LIBRARY_H
 #define FILESYSTEM_LIBRARY_H
 
-#include <stdint.h>
-#include <errno.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#include <stdint.h>
+#include <errno.h>
 
 #if (!defined __STDC_VERSION__ || __STDC_VERSION__ < 202000) && !defined __cplusplus
 typedef uint8_t fs_bool;
