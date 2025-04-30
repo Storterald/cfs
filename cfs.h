@@ -8,22 +8,17 @@ extern "C" {
 #include <stdint.h>
 #include <errno.h>
 
-#if (!defined __STDC_VERSION__ || __STDC_VERSION__ < 202000) && !defined __cplusplus
 typedef uint8_t fs_bool;
 #define FS_TRUE 1U
 #define FS_FALSE 0U
-#else
-typedef bool fs_bool;
-#define FS_TRUE true
-#define FS_FALSE false
-#endif // __STDC_VERSION__
 
 #ifdef _WIN32
 #include <wchar.h>
+#include <winerror.h>
 
 #define FS_CHAR wchar_t
-#define FS_PREFERRED_SEPARATOR L'\\'
-#define FS_PREFERRED_SEPARATOR_S L"\\"
+#define FS_PREFERRED_SEPARATOR (L'\\')
+#define FS_PREFERRED_SEPARATOR_S (L"\\")
 #else // _WIN32
 #define FS_CHAR char
 #define FS_PREFERRED_SEPARATOR '/'
@@ -56,6 +51,13 @@ do {                                            \
         (pec)->msg = NULL;                      \
 } while (FS_FALSE)
 
+#define FOR_EACH_PATH_ITER(__it__)                                      \
+        for (; *FS_DEREF_PATH_ITER(__it__); fs_path_iter_next(&__it__))
+
+#define FOR_EACH_ENTRY_IN_DIR(__name__, __it__)                                         \
+        for (fs_cpath __name__ = FS_DEREF_DIR_ITER(__it__); __name__;                   \
+                fs_dir_iter_next(&(__it__)), __name__ = FS_DEREF_DIR_ITER(__it__))
+
 typedef uintmax_t fs_file_time_type;
 typedef FS_CHAR *fs_path;
 typedef const FS_CHAR *fs_cpath;
@@ -74,7 +76,7 @@ typedef enum fs_file_type {
         fs_file_type_socket, // not used on Windows
         fs_file_type_unknown,
 
-        fs_file_junction // implementation-defined value indicating an NT junction
+        fs_file_type_junction // implementation-defined value indicating an NT junction
 
 } fs_file_type;
 
@@ -152,6 +154,18 @@ typedef enum fs_error_type {
 
 } fs_error_type;
 
+typedef enum fs_err {
+        fs_err_no_such_file_or_directory = ENOENT,
+        fs_err_invalid_argument          = EINVAL,
+        fs_err_function_not_supported    = ENOSYS,
+        fs_err_file_exists               = EEXIST,
+        fs_err_is_a_directory            = EISDIR,
+        fs_err_loop                      = ELOOP,
+#ifdef _WIN32
+        fs_err_reparse_tag_invalid       = ERROR_REPARSE_TAG_INVALID
+#endif // _WIN32
+} fs_err;
+
 typedef struct fs_space_info {
         uintmax_t capacity;
         uintmax_t free;
@@ -166,7 +180,7 @@ typedef struct fs_file_status {
 
 typedef struct fs_error_code {
         fs_error_type type;
-        uint32_t code;
+        fs_err code;
         char *msg;
 
 } fs_error_code;
@@ -175,6 +189,7 @@ typedef struct fs_path_iter {
         fs_cpath pos;
         fs_path elem;
         fs_cpath begin;
+
 } fs_path_iter;
 
 typedef struct fs_dir_iter {
@@ -235,9 +250,9 @@ fs_file_time_type fs_last_write_time(fs_cpath p, fs_error_code *ec);
 
 void fs_last_write_time_wr(fs_cpath p, fs_file_time_type new_time, fs_error_code *ec);
 
-void fs_permission(fs_cpath p, fs_perms prms, fs_error_code *ec);
+void fs_permissions(fs_cpath p, fs_perms prms, fs_error_code *ec);
 
-void fs_permission_opt(fs_cpath p, fs_perms prms, fs_perm_options opts, fs_error_code *ec);
+void fs_permissions_opt(fs_cpath p, fs_perms prms, fs_perm_options opts, fs_error_code *ec);
 
 fs_path fs_read_symlink(fs_cpath p, fs_error_code *ec);
 
@@ -299,6 +314,8 @@ fs_path fs_path_append(fs_cpath p, fs_cpath other);
 
 fs_path _fs_path_appendv(int c, ...);
 #define fs_path_append_v(...) _fs_path_appendv(sizeof((fs_cpath []){__VA_ARGS__}) / sizeof(fs_path), __VA_ARGS__)
+
+void fs_path_append_s(fs_path *pp, fs_cpath other);
 
 fs_path fs_path_concat(fs_cpath p, fs_cpath other);
 
@@ -378,9 +395,9 @@ fs_recursive_dir_iter fs_recursive_directory_iterator(fs_cpath p, fs_error_code 
 
 fs_recursive_dir_iter fs_recursive_directory_iterator_opt(fs_cpath p, fs_directory_options options, fs_error_code *ec);
 
-void fs_recursive_dir_iter_next(fs_recursive_dir_iter *it);
+#define fs_recursive_dir_iter_next(__it__) fs_dir_iter_next(__it__)
 
-void fs_recursive_dir_iter_prev(fs_recursive_dir_iter *it);
+#define fs_recursive_dir_iter_prev(__it__) fs_dir_iter_prev(__it__)
 
 //          fs_iters --------
 
