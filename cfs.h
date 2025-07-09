@@ -14,7 +14,6 @@ typedef uint8_t fs_bool;
 
 #ifdef _WIN32
 #include <wchar.h>
-#include <winerror.h>
 
 #define FS_CHAR wchar_t
 #define FS_PREFERRED_SEPARATOR (L'\\')
@@ -52,7 +51,7 @@ do {                                            \
 } while (FS_FALSE)
 
 #define FOR_EACH_PATH_ITER(__it__)                                      \
-        for (; *FS_DEREF_PATH_ITER(__it__); fs_path_iter_next(&__it__))
+        for (; *FS_DEREF_PATH_ITER(__it__); fs_path_iter_next(&(__it__)))
 
 #define FOR_EACH_ENTRY_IN_DIR(__name__, __it__)                                         \
         for (fs_cpath __name__ = FS_DEREF_DIR_ITER(__it__); __name__;                   \
@@ -74,9 +73,7 @@ typedef enum fs_file_type {
 
         fs_file_type_fifo, // not used on Windows (\\.\pipe named pipes don't behave exactly like POSIX fifos)
         fs_file_type_socket, // not used on Windows
-        fs_file_type_unknown,
-
-        fs_file_type_junction // implementation-defined value indicating an NT junction
+        fs_file_type_unknown
 
 } fs_file_type;
 
@@ -149,12 +146,13 @@ typedef enum fs_directory_options {
 
 typedef enum fs_error_type {
         fs_error_type_unknown,
-        fs_error_type_filesystem, // ERRNO ERRORS
+        fs_error_type_filesystem,
         fs_error_type_system
 
 } fs_error_type;
 
 typedef enum fs_err {
+        fs_err_success                   = 0,
         fs_err_no_such_file_or_directory = ENOENT,
         fs_err_invalid_argument          = EINVAL,
         fs_err_function_not_supported    = ENOSYS,
@@ -162,7 +160,7 @@ typedef enum fs_err {
         fs_err_is_a_directory            = EISDIR,
         fs_err_loop                      = ELOOP,
 #ifdef _WIN32
-        fs_err_reparse_tag_invalid       = ERROR_REPARSE_TAG_INVALID
+        fs_err_reparse_tag_invalid
 #endif // _WIN32
 } fs_err;
 
@@ -318,6 +316,8 @@ fs_path _fs_path_appendv(int c, ...);
 void fs_path_append_s(fs_path *pp, fs_cpath other);
 
 fs_path fs_path_concat(fs_cpath p, fs_cpath other);
+
+void fs_path_concat_s(fs_path *pp, fs_cpath other);
 
 void fs_path_clear(fs_path *pp);
 

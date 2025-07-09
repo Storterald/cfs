@@ -3,12 +3,24 @@
 #include <sys/stat.h>
 #include <stdio.h>
 
-static fs_error_code _fs_internal_error = {};
+#if !defined(S_ISREG) && defined(S_IFMT) && defined(S_IFREG)
+#define S_ISREG(m) (((m) & S_IFMT) == S_IFREG)
+#endif // !S_ISREG && S_IFMT && S_IFREG
+
+#if !defined(S_ISDIR) && defined(S_IFMT) && defined(S_IFDIR)
+#define S_ISDIR(m) (((m) & S_IFMT) == S_IFDIR)
+#endif // !S_ISDIR && S_IFMT && S_IFDIR
+
+#if !defined(S_ISCHR) && defined(S_IFMT) && defined(S_IFCHR)
+#define S_ISCHR(m) (((m) & S_IFMT) == S_IFCHR)
+#endif // !S_ISCHR && S_IFMT && S_IFCHR
+
+static fs_error_code _fs_internal_error = {0};
 
 #define FS_CLEAR_ERROR_CODE(ec)                 \
 do {                                            \
         ec = ec ? ec : &_fs_internal_error;     \
-        *ec = (fs_error_code){};                \
+        *ec = (fs_error_code){0};               \
 } while (FS_FALSE)
 
 #define FS_CFS_ERROR(pec, e)                            \
@@ -58,41 +70,54 @@ fs_bool fs_is_##what(fs_cpath p, fs_error_code *ec)     \
                                                         \
         return fs_is_##what##_s(status);                \
 }
-#endif // NDEBUG
+#endif // !NDEBUG
+
+#define FS_STACK_PATH_DECLARATION(name) FS_CHAR name[FS_MAX_PATH] = FS_PREF("")
+typedef FS_CHAR *_fs_char_it;
+typedef const FS_CHAR *_fs_char_cit;
+
+#ifdef _MSC_VER
+#define FS_SDUP _strdup
+#define FS_WDUP _wcsdup
+#else // _MSC_VER
+#define FS_SDUP strdup
+#define FS_WDUP wcsdup
+#endif // _MSC_VER
 
 #ifdef _WIN32
 #include <windows.h>
-#include <fileapi.h>
-#include <aclapi.h>
-#include <shlobj.h>
+#include <shlobj.h> // SHCreateDirectoryExW
 
 #define FS_PREF(s) L##s
 #define FS_MAX_PATH MAX_PATH // used outside OS specific blocks
 
 #define FS_STR(__foo__, ...) wcs##__foo__(__VA_ARGS__)
+#define FS_DUP FS_WDUP
 
 #define FS_STAT _wstat64
-typedef struct __stat64 stat_type;
+#define FS_LSTAT _wstat64 // TODO: SYMLINK NOT CURRENTLY SUPPORTED
+typedef struct __stat64 _fs_stat;
 
 #define IS_ENOENT(__err__) (                    \
-           __err__ == ERROR_PATH_NOT_FOUND      \
-        || __err__ == ERROR_FILE_NOT_FOUND      \
-        || __err__ == ERROR_INVALID_NAME)
+           (__err__) == ERROR_PATH_NOT_FOUND    \
+        || (__err__) == ERROR_FILE_NOT_FOUND    \
+        || (__err__) == ERROR_INVALID_NAME)
 #else // _WIN32
+#include <unistd.h>
+#include <stdlib.h>
+
 #define FS_STR_PREF(s) s
 #define FS_MAX_PATH PATH_MAX // used outside OS specific blocks
 
 #define FS_STR(__foo__, ...) str##__foo__(__VA_ARGS__)
+#define FS_DUP FS_SDUP
 
 #define FS_STAT stat
-typedef struct stat stat_type;
+#define FS_LSTAT lstat
+typedef struct stat _fs_stat;
 
 #define IS_ENOENT(__err__) (__err__ == ENOENT)
 #endif // _WIN32
-
-#define FS_STACK_PATH_DECLARATION(name) FS_CHAR name[FS_MAX_PATH] = FS_PREF("")
-#define FS_CHAR_IT FS_CHAR *
-#define FS_CHAR_CIT const FS_CHAR *
 
 #ifdef _WIN32
 #ifdef CreateSymbolicLink
@@ -121,19 +146,19 @@ typedef struct _fs_reparse_data_buffer {
                 struct _fs_generic_reparse_buffer {
                         UCHAR data_buffer[1];
                 } generic_reparse_buffer;
-        };
+        } buffer;
 
 } _fs_reparse_data_buffer;
 typedef struct _fs_symbolic_link_reparse_buffer _fs_symbolic_link_reparse_buffer;
-typedef struct _fs_mount_point_reparse_buffer _fs_mount_point_reparse_buffer;
-typedef struct _fs_generic_reparse_buffer _fs_generic_reparse_buffer;
+typedef struct _fs_mount_point_reparse_buffer   _fs_mount_point_reparse_buffer;
+typedef struct _fs_generic_reparse_buffer       _fs_generic_reparse_buffer;
 #endif // CreateSymbolicLink
 #else // _WIN32
 
 #endif // _WIN32
 
 #ifdef _MSC_VER
-#define FS_FORCE_INLINE __force_inline
+#define FS_FORCE_INLINE __forceinline
 #else // _MSC_VER
 #define FS_FORCE_INLINE __attribute__((always_inline)) inline
 #endif // _MSC_VER
@@ -152,7 +177,7 @@ typedef enum _fs_stats_flag {
 } _fs_stats_flag;
 
 #ifdef _WIN32
-typedef enum _fs_path_kind : DWORD {
+typedef enum _fs_path_kind {
         _fs_path_kind_Dos  = VOLUME_NAME_DOS,
         _fs_path_kind_Guid = VOLUME_NAME_GUID,
         _fs_path_kind_Nt   = VOLUME_NAME_NT,
@@ -160,7 +185,7 @@ typedef enum _fs_path_kind : DWORD {
 
 } _fs_path_kind;
 
-typedef enum _fs_access_rights : DWORD {
+typedef enum _fs_access_rights {
         _fs_access_rights_Delete                = DELETE,
         _fs_access_rights_File_read_attributes  = FILE_READ_ATTRIBUTES,
         _fs_access_rights_File_write_attributes = FILE_WRITE_ATTRIBUTES,
@@ -170,7 +195,7 @@ typedef enum _fs_access_rights : DWORD {
                 | FILE_WRITE_EA | FILE_APPEND_DATA | SYNCHRONIZE
 } _fs_access_rights;
 
-typedef enum _fs_file_flags : DWORD {
+typedef enum _fs_file_flags {
         _fs_file_flags_None               = 0,
         _fs_file_flags_Normal             = FILE_ATTRIBUTE_NORMAL,
         _fs_file_flags_Backup_semantics   = FILE_FLAG_BACKUP_SEMANTICS,
@@ -183,37 +208,39 @@ typedef enum _fs_file_flags : DWORD {
 // -------- Helper functions
 
 static char *_fs_error_string(fs_error_type type, uint32_t e);
-static inline fs_path _dupe_string(fs_cpath first, fs_cpath last);
+FS_FORCE_INLINE static fs_path _dupe_string(fs_cpath first, fs_cpath last);
+static fs_file_type _get_file_type(fs_cpath p, const _fs_stat *st);
+static fs_bool _is_symlink(fs_cpath p);
 
 FS_FORCE_INLINE static fs_bool _is_separator(FS_CHAR c);
 static void _path_append_s(fs_path *pp, fs_cpath other, fs_bool realloc);
 
-FS_FORCE_INLINE static fs_bool _exists(fs_file_type t);
-FS_FORCE_INLINE static fs_bool _is_block_file(fs_file_type t);
-FS_FORCE_INLINE static fs_bool _is_character_file(fs_file_type t);
-FS_FORCE_INLINE static fs_bool _is_directory(fs_file_type t);
-FS_FORCE_INLINE static fs_bool _is_fifo(fs_file_type t);
-FS_FORCE_INLINE static fs_bool _is_other(fs_file_type t);
-FS_FORCE_INLINE static fs_bool _is_regular_file(fs_file_type t);
-FS_FORCE_INLINE static fs_bool _is_socket(fs_file_type t);
-FS_FORCE_INLINE static fs_bool _is_symlink(fs_file_type t);
-FS_FORCE_INLINE static fs_bool _status_known(fs_file_type t);
+FS_FORCE_INLINE static fs_bool _exists_t(fs_file_type t);
+FS_FORCE_INLINE static fs_bool _is_block_file_t(fs_file_type t);
+FS_FORCE_INLINE static fs_bool _is_character_file_t(fs_file_type t);
+FS_FORCE_INLINE static fs_bool _is_directory_t(fs_file_type t);
+FS_FORCE_INLINE static fs_bool _is_fifo_t(fs_file_type t);
+FS_FORCE_INLINE static fs_bool _is_other_t(fs_file_type t);
+FS_FORCE_INLINE static fs_bool _is_regular_file_t(fs_file_type t);
+FS_FORCE_INLINE static fs_bool _is_socket_t(fs_file_type t);
+FS_FORCE_INLINE static fs_bool _is_symlink_t(fs_file_type t);
+FS_FORCE_INLINE static fs_bool _status_known_t(fs_file_type t);
+
+static _fs_char_cit _find_root_name_end(fs_cpath p);
+static _fs_char_cit _find_root_directory_end(_fs_char_cit rtnend);
+static _fs_char_cit _find_relative_path(fs_cpath p);
+static _fs_char_cit _find_parent_path_end(fs_cpath p);
+static _fs_char_cit _find_filename(fs_cpath p);
+static _fs_char_cit _find_extension(fs_cpath p, _fs_char_cit *extend);
+
+FS_FORCE_INLINE static fs_bool _is_absolute(fs_cpath p, _fs_char_cit rtnend, _fs_char_cit *rtdir);
+#define _has_root_name(p, rtnend) (p != rtnend)
+#define _has_root_dir(rtnend, rtdend) (rtnend != rtdend)
 
 #ifdef _WIN32
-// -------- Path utils
 FS_FORCE_INLINE static fs_bool _is_drive(fs_cpath p);
-FS_FORCE_INLINE static fs_bool _has_drive(fs_cpath p);
 FS_FORCE_INLINE static fs_bool _is_drive_prefix_with_slash_slash_question(fs_cpath p);
-FS_FORCE_INLINE static fs_bool _relative_path_contains_root_name(fs_cpath p);
-FS_FORCE_INLINE static fs_bool _fs_path_is_absolute(fs_cpath p, FS_CHAR_CIT rtnend);
-
-static FS_CHAR_CIT _find_root_name_end(fs_cpath p);
-static FS_CHAR_CIT _find_root_directory_end(FS_CHAR_CIT rtnend);
-static FS_CHAR_CIT _find_relative_path(fs_cpath p);
-static FS_CHAR_CIT _find_parent_path_end(fs_cpath p);
-static FS_CHAR_CIT _find_filename(fs_cpath p);
-static FS_CHAR_CIT _find_extension(fs_cpath p, FS_CHAR_CIT ads);
-//          Path utils --------
+static fs_bool _relative_path_contains_root_name(fs_cpath p);
 
 static HANDLE _fs_get_handle(fs_cpath p, _fs_access_rights rights, _fs_file_flags flags, fs_error_code *ec);
 
@@ -225,6 +252,8 @@ static fs_path _get_final_path(fs_cpath p, _fs_path_kind *pkind, fs_error_code *
 static void _change_file_permissions(fs_cpath p, fs_bool follow_symlinks, fs_bool readonly, fs_error_code *ec);
 static uint32_t _recursive_count(fs_cpath p, fs_bool follow_symlinks, fs_error_code *ec);
 static uint32_t _recursive_entries(fs_cpath p, fs_bool follow_symlinks, fs_cpath *buf, fs_error_code *ec);
+#else // _WIN32
+#define _relative_path_contains_root_name(...) FS_FALSE
 #endif // _WIN32
 
 //          Helper functions --------
@@ -236,21 +265,23 @@ char *_fs_error_string(fs_error_type type, uint32_t e)
                 break;
         case fs_error_type_filesystem:
                 switch((fs_err)e) {
+                case fs_err_success:
+                        return FS_SDUP("cfs error: success");
                 case fs_err_no_such_file_or_directory:
-                        return strdup("cfs error: no such file or directory");
+                        return FS_SDUP("cfs error: no such file or directory");
                 case fs_err_invalid_argument:
-                        return strdup("cfs error: invalid argument");
+                        return FS_SDUP("cfs error: invalid argument");
                 case fs_err_function_not_supported:
-                        return strdup("cfs error: function not supported");
+                        return FS_SDUP("cfs error: function not supported");
                 case fs_err_file_exists:
-                        return strdup("cfs error: file already _exists");
+                        return FS_SDUP("cfs error: file already _exists");
                 case fs_err_is_a_directory:
-                        return strdup("cfs error: item is a directory");
+                        return FS_SDUP("cfs error: item is a directory");
                 case fs_err_loop:
-                        return strdup("cfs error: symlink loop");
+                        return FS_SDUP("cfs error: symlink loop");
 #ifdef _WIN32
                 case fs_err_reparse_tag_invalid:
-                        return strdup("cfs error: invalid reparse tag");
+                        return FS_SDUP("cfs error: invalid reparse tag");
 #endif // _WIN32
                 }
                 break; // Safety if there is a missing case above
@@ -281,7 +312,7 @@ char *_fs_error_string(fs_error_type type, uint32_t e)
 fs_path _dupe_string(fs_cpath first, fs_cpath last)
 {
         if (first == last)
-                return FS_STR(dup, FS_PREF(""));
+                return FS_DUP(FS_PREF(""));
 
         const size_t len = last - first;
         const size_t size = (len + 1) * sizeof(FS_CHAR);
@@ -291,6 +322,52 @@ fs_path _dupe_string(fs_cpath first, fs_cpath last)
         out[len] = '\0';
 
         return out;
+}
+
+fs_file_type _get_file_type(fs_cpath p, const _fs_stat *st)
+{
+#ifdef S_ISREG
+        if (S_ISREG(st->st_mode))
+                return fs_file_type_regular;
+        if (S_ISDIR(st->st_mode))
+                return fs_file_type_directory;
+        if (S_ISCHR(st->st_mode))
+                return fs_file_type_character;
+#ifdef S_ISBLK
+        if (S_ISBLK(st->st_mode))
+                return fs_file_type_block;
+        if (S_ISFIFO(st->st_mode))
+                return fs_file_type_fifo;
+#endif // S_ISBLK
+#ifdef S_ISLNK
+        if (S_ISLNK(st->st_mode))
+                return fs_file_type_symlink;
+#else // S_ISLNK
+        if (_is_symlink(p))
+                return fs_file_type_symlink;
+#endif // S_ISLNK
+#ifdef S_ISSOCK
+        if (S_ISSOCK(st->st_mode))
+                return fs_file_type_socket;
+#endif // S_ISSOCK
+#endif // S_ISREG
+
+        return fs_file_type_unknown;
+}
+
+fs_bool _is_symlink(fs_cpath p)
+{
+#ifdef _WIN32
+#ifdef FS_SYMLINKS_SUPPORTED
+        if (GetFileAttributesW(p) & FILE_ATTRIBUTE_REPARSE_POINT)
+                return FS_TRUE;
+#else // FS_SYMLINKS_SUPPORTED
+        return FS_FALSE;
+#endif // FS_SYMLINKS_SUPPORTED
+#else // _WIN32
+#error "not implemented"
+#endif // _WIN32
+        return FS_FALSE;
 }
 
 fs_bool _is_separator(FS_CHAR c)
@@ -307,19 +384,17 @@ void _path_append_s(fs_path *pp, fs_cpath other, fs_bool realloc)
         fs_path p = *pp;
 
 #ifdef _WIN32
-        FS_CHAR_CIT ortnend = _find_root_name_end(other);
-        if (_fs_path_is_absolute(other, ortnend))
+        _fs_char_cit ortnend = _find_root_name_end(other);
+        if (_is_absolute(other, ortnend, NULL))
                 goto replace;
 
-        size_t plen = wcslen(p);
-        size_t olen = wcslen(other);
-        FS_CHAR_IT plast = p + plen;
-        FS_CHAR_CIT olast = other + olen;
-        FS_CHAR_CIT prtend = _find_root_name_end(p);
+        size_t plen               = wcslen(p);
+        const size_t olen         = wcslen(other);
+        const _fs_char_it plast   = p + plen;
+        const _fs_char_cit olast  = other + olen;
+        const _fs_char_cit prtend = _find_root_name_end(p);
 
-        const size_t prtlen = plen;
-        const size_t ortlen = ortnend - other;
-        if (other != ortnend && (prtlen != ortlen || wcsncmp(p, other, min(prtlen, ortlen)) != 0))
+        if (other != ortnend && wcscmp(p, other) != 0)
                 goto replace;
 
         if (ortnend != olast && _is_separator(*ortnend)) {
@@ -354,7 +429,7 @@ void _path_append_s(fs_path *pp, fs_cpath other, fs_bool realloc)
 replace:
         if (realloc) {
                 free(p);
-                *pp = wcsdup(other);
+                *pp = FS_WDUP(other);
         } else {
                 wcscpy(p, other);
         }
@@ -364,32 +439,32 @@ replace:
 #endif // _WIN32
 }
 
-fs_bool _exists(fs_file_type t)
+fs_bool _exists_t(fs_file_type t)
 {
         return t != fs_file_type_none && t != fs_file_type_not_found;
 }
 
-fs_bool _is_block_file(fs_file_type t)
+fs_bool _is_block_file_t(fs_file_type t)
 {
         return t == fs_file_type_block;
 }
 
-fs_bool _is_character_file(fs_file_type t)
+fs_bool _is_character_file_t(fs_file_type t)
 {
         return t == fs_file_type_character;
 }
 
-fs_bool _is_directory(fs_file_type t)
+fs_bool _is_directory_t(fs_file_type t)
 {
         return t == fs_file_type_directory;
 }
 
-fs_bool _is_fifo(fs_file_type t)
+fs_bool _is_fifo_t(fs_file_type t)
 {
         return t == fs_file_type_fifo;
 }
 
-fs_bool _is_other(fs_file_type t)
+fs_bool _is_other_t(fs_file_type t)
 {
         switch(t) {
         case fs_file_type_none:
@@ -403,87 +478,36 @@ fs_bool _is_other(fs_file_type t)
         case fs_file_type_fifo:
         case fs_file_type_socket:
         case fs_file_type_unknown:
-        case fs_file_type_junction:
         default:
                 return FS_TRUE;
         }
 }
 
-fs_bool _is_regular_file(fs_file_type t)
+fs_bool _is_regular_file_t(fs_file_type t)
 {
         return t == fs_file_type_regular;
 }
 
-fs_bool _is_socket(fs_file_type t)
+fs_bool _is_socket_t(fs_file_type t)
 {
         return t == fs_file_type_socket;
 }
 
-fs_bool _is_symlink(fs_file_type t)
+fs_bool _is_symlink_t(fs_file_type t)
 {
         return t == fs_file_type_symlink;
 }
 
-fs_bool _status_known(fs_file_type t)
+fs_bool _status_known_t(fs_file_type t)
 {
         return t != fs_file_type_unknown;
 }
 
-#ifdef _WIN32
-
-fs_bool _is_drive(fs_cpath p)
-{
-        unsigned int value;
-        memcpy(&value, p, sizeof(value));
-
-        value &= 0xFFFFFFDFu;
-        value -= ((unsigned int)(L':') << (sizeof(wchar_t) * CHAR_BIT)) | L'A';
-        return value < 26;
-}
-
-fs_bool _has_drive(fs_cpath p)
-{
-        return wcslen(p) >= 2 && _is_drive(p);
-}
-
-fs_bool _is_drive_prefix_with_slash_slash_question(fs_cpath p)
-{
-        return wcslen(p) >= 6 && wcsncmp(p, L"\\\\?\\", 4) == 0 && _is_drive(p + 4);
-}
-
-fs_bool _relative_path_contains_root_name(fs_cpath p)
-{
-        FS_CHAR_IT first = (FS_CHAR_IT) _find_relative_path(p);
-        FS_CHAR_CIT last = p + wcslen(p);
-        while (first != last) {
-                wchar_t *next = first;
-                while(*next && !_is_separator(*next)) // find_if
-                        ++next;
-
-                if (_find_root_name_end(first) != first) // starts with root name
-                        return FS_TRUE;
-
-                first = next;
-                while (*first && _is_separator(*first)) // find_if_not
-                        ++first;
-        }
-
-        return FS_FALSE;
-}
-
-fs_bool _fs_path_is_absolute(fs_cpath p, FS_CHAR_CIT rtnend)
-{
-        if (_has_drive(p))
-                return wcslen(p) >= 3 && _is_separator(p[2]);
-
-        return p != rtnend;
-}
-
-FS_CHAR_CIT _find_root_name_end(fs_cpath p)
+_fs_char_cit _find_root_name_end(fs_cpath p)
 {
 #ifdef _WIN32
         const size_t len = FS_STR(len, p);
-        if (len < 2) // Too short for root name
+        if (len < 2)  // Too short for root name
                 return p;
 
         if (p[0] && p[1] == L':')
@@ -504,36 +528,29 @@ FS_CHAR_CIT _find_root_name_end(fs_cpath p)
 
                 return min(it1, it2);
         }
-
-#else // _WIN32
-#error "not implemented"
 #endif // _WIN32
+
         return p;
 }
 
-FS_CHAR_CIT _find_root_directory_end(FS_CHAR_CIT rtnend)
+_fs_char_cit _find_root_directory_end(_fs_char_cit rtnend)
 {
-        FS_CHAR_CIT rel = rtnend;
+        _fs_char_cit rel = rtnend;
         while (*rel && _is_separator(*rel)) // find_if_not
                 ++rel;
 
         return rel;
 }
 
-FS_CHAR_CIT _find_relative_path(fs_cpath p)
+_fs_char_cit _find_relative_path(fs_cpath p)
 {
-        FS_CHAR_CIT rtend = _find_root_name_end(p);
-        FS_CHAR_CIT rel = rtend;
-        while (_is_separator(*rel)) // find_if_not
-                ++rel;
-
-        return rel;
+        return _find_root_directory_end(_find_root_name_end(p));
 }
 
-FS_CHAR_CIT _find_parent_path_end(fs_cpath p)
+_fs_char_cit _find_parent_path_end(fs_cpath p)
 {
-        FS_CHAR_CIT last = p + FS_STR(len, p);
-        FS_CHAR_CIT rel = _find_relative_path(p);
+        _fs_char_cit last      = p + FS_STR(len, p);
+        const _fs_char_cit rel = _find_relative_path(p);
 
         while (rel != last && !_is_separator(last[-1]))
                 --last;
@@ -544,10 +561,10 @@ FS_CHAR_CIT _find_parent_path_end(fs_cpath p)
         return last;
 }
 
-FS_CHAR_CIT _find_filename(fs_cpath p)
+_fs_char_cit _find_filename(fs_cpath p)
 {
-        FS_CHAR_CIT it = _find_relative_path(p);
-        FS_CHAR_CIT last = p + FS_STR(len, p);
+        const _fs_char_cit it = _find_relative_path(p);
+        _fs_char_cit last     = p + FS_STR(len, p);
 
         while (it != last && !_is_separator(last[-1]))
                 --last;
@@ -555,28 +572,89 @@ FS_CHAR_CIT _find_filename(fs_cpath p)
         return last;
 }
 
-FS_CHAR_CIT _find_extension(fs_cpath p, FS_CHAR_CIT ads)
+_fs_char_cit _find_extension(fs_cpath p, _fs_char_cit *extend)
 {
-        FS_CHAR_CIT ext = ads;
-        if (p == ext)
-                return ads;
+        const size_t len = FS_STR(len, p);
+#ifdef _WIN32
+        _fs_char_cit end = wcschr(_find_filename(p), L':');
+        end = end ? end : p + len;
+#else // _WIN32
+        const _fs_char_cit end = p + len;
+#endif // _WIN32
 
-        --ext;
-        if (p == ext)
-                return ads;
+        if (extend)
+                *extend = end;
 
-        if (*ext == FS_PREF('.')) {
-                if (p == ext - 1 && ext[-1] == FS_PREF('.'))
-                        return ads;
-                else
+        _fs_char_cit ext = end;
+        if (p == ext)  // Empty path or starts with an ADS
+                return end;
+
+        // If the path is /. or /..
+        if (--ext != p && *ext == FS_PREF('.')
+            && (ext[-1] == FS_PREF('.') || _is_separator(ext[-1])))
+                return end;
+
+        while (p != --ext) {
+                if (_is_separator(*ext))
+                        return end;
+
+                if (*ext == FS_PREF('.'))
                         return ext;
         }
 
-        while (p != --ext)
-                if (*ext == FS_PREF('.'))
-                        return ext;
+        return end;
+}
 
-        return ads;
+fs_bool _is_absolute(fs_cpath p, _fs_char_cit rtnend, _fs_char_cit *rtdir)
+{
+        const _fs_char_cit rtdend = _find_root_directory_end(rtnend);
+
+#ifdef _WIN32
+        const fs_bool has_root_name = _has_root_name(p, rtnend);
+#else // _WIN32
+        const fs_bool has_root_name = FS_TRUE;
+#endif // _WIN32
+
+        if (rtdir)
+                *rtdir = rtdend;
+
+        return has_root_name && _has_root_dir(rtnend, rtdend);
+}
+
+#ifdef _WIN32
+
+fs_bool _is_drive(fs_cpath p)
+{
+        unsigned int value;
+        memcpy(&value, p, sizeof(value));
+
+        value &= 0xFFFFFFDFu;
+        value -= ((unsigned int)(L':') << (sizeof(wchar_t) * CHAR_BIT)) | L'A';
+        return value < 26;
+}
+
+fs_bool _is_drive_prefix_with_slash_slash_question(fs_cpath p)
+{
+        return wcslen(p) >= 6 && wcsncmp(p, L"\\\\?\\", 4) == 0 && _is_drive(p + 4);
+}
+
+fs_bool _relative_path_contains_root_name(fs_cpath p) {
+        const size_t len   = FS_STR(len, p);
+        _fs_char_cit first = _find_relative_path(p);
+        _fs_char_cit last  = p + len;
+        while (first != last) {
+                _fs_char_cit next = first;
+                while (next != last && !_is_separator(*next))
+                        ++next;
+
+                if (_find_root_name_end(first) != first)
+                        return FS_TRUE;
+
+                while (next != last && _is_separator(*next))
+                        ++next;
+                first = next;
+        }
+        return FS_FALSE;
 }
 
 HANDLE _fs_get_handle(fs_cpath p, _fs_access_rights rights, _fs_file_flags flags, fs_error_code *ec)
@@ -601,7 +679,8 @@ fs_path _read_symlink(fs_cpath p, fs_error_code *ec)
 {
         const DWORD flags = _fs_file_flags_Backup_semantics
                 | _fs_file_flags_Open_reparse_point;
-        HANDLE hFile = _fs_get_handle(p, _fs_access_rights_File_read_attributes, flags, ec);
+        const HANDLE hFile = _fs_get_handle(
+                p, _fs_access_rights_File_read_attributes, flags, ec);
         if (ec->code)
                 return NULL;
 
@@ -619,7 +698,7 @@ fs_path _read_symlink(fs_cpath p, fs_error_code *ec)
         wchar_t *offset;
 
         if (rdata->reparse_tag == IO_REPARSE_TAG_SYMLINK) {
-                _fs_symbolic_link_reparse_buffer *sbuf = &rdata->symbolic_link_reparse_buffer;
+                _fs_symbolic_link_reparse_buffer *sbuf = &rdata->buffer.symbolic_link_reparse_buffer;
                 const USHORT tmp = sbuf->print_name_length / sizeof(wchar_t);
 
                 if (tmp == 0) {
@@ -632,7 +711,7 @@ fs_path _read_symlink(fs_cpath p, fs_error_code *ec)
                         offset = &sbuf->path_buffer[idx];
                 }
         } else if (rdata->reparse_tag == IO_REPARSE_TAG_MOUNT_POINT) {
-                _fs_mount_point_reparse_buffer *jbuf = &rdata->mount_point_reparse_buffer;
+                _fs_mount_point_reparse_buffer *jbuf = &rdata->buffer.mount_point_reparse_buffer;
                 const USHORT tmp = jbuf->print_name_length / sizeof(wchar_t);
 
                 if (tmp == 0) {
@@ -667,16 +746,14 @@ fs_path _get_final_path(fs_cpath p, _fs_path_kind *pkind, fs_error_code *ec)
                 return NULL;
 #endif // FS_SYMLINKS_SUPPORTED
 
-        FS_STACK_PATH_DECLARATION(stackb);
-        FS_CHAR_IT buf = stackb;
-        uint32_t blen = MAX_PATH;
-        DWORD len = (DWORD)blen;
+        DWORD len       = MAX_PATH;
+        _fs_char_it buf = malloc(len * sizeof(wchar_t));
 
         for (;;) {
 #ifdef FS_SYMLINKS_SUPPORTED
-                len = GetFinalPathNameByHandleW(hFile, buf, MAX_PATH, kind);
+                DWORD req = GetFinalPathNameByHandleW(hFile, buf, MAX_PATH, kind);
 #else // FS_SYMLINKS_SUPPORTED
-                len = GetFullPathNameW(p, len, buf, NULL);
+                DWORD req = GetFullPathNameW(p, len, buf, NULL);
 #endif // FS_SYMLINKS_SUPPORTED
 
                 if (len == 0) {
@@ -694,9 +771,10 @@ fs_path _get_final_path(fs_cpath p, _fs_path_kind *pkind, fs_error_code *ec)
                         return NULL;
                 }
 
-                if (len > blen) {
-                        buf = malloc(len * sizeof(wchar_t));
-                        blen = len;
+                if (req > len) {
+                        free(buf);
+                        buf = malloc(req * sizeof(wchar_t));
+                        len = req;
                 } else {
                         break;
                 }
@@ -705,9 +783,6 @@ fs_path _get_final_path(fs_cpath p, _fs_path_kind *pkind, fs_error_code *ec)
 #ifdef FS_SYMLINKS_SUPPORTED
         CloseHandle(hFile);
 #endif // FS_SYMLINKS_SUPPORTED
-
-        if (buf == stackb)
-                buf = wcsdup(buf);
 
         *pkind = kind;
         return buf;
@@ -727,7 +802,7 @@ void _change_file_permissions(fs_cpath p, fs_bool follow_symlinks, fs_bool reado
         if ((oldattrs & FILE_ATTRIBUTE_REPARSE_POINT) != 0u && follow_symlinks) {
                 const _fs_access_rights flags = _fs_access_rights_File_read_attributes
                         | _fs_access_rights_File_write_attributes;
-                HANDLE hFile = _fs_get_handle(
+                const HANDLE hFile = _fs_get_handle(
                         p, flags, _fs_file_flags_Backup_semantics, ec);
                 if (ec->code)
                         goto defer;
@@ -762,6 +837,7 @@ defer:
         FS_SYSTEM_ERROR(ec, GetLastError());
 }
 
+// TODO single _recursive function, use realloc to extend buffer instead of count
 uint32_t _recursive_count(fs_cpath p, fs_bool follow_symlinks, fs_error_code *ec)
 {
         if (follow_symlinks > 40) {
@@ -881,7 +957,7 @@ uint32_t _recursive_entries(fs_cpath p, fs_bool follow_symlinks, fs_cpath *buf, 
                 }
 #endif // FS_SYMLINKS_SUPPORTED
 
-                buf[idx++] = FS_STR(dup, base);
+                buf[idx++] = FS_DUP(base);
                 if (recurse)
                         idx += _recursive_entries(base, follow_symlinks, buf + idx, ec);
 
@@ -912,48 +988,48 @@ fs_path fs_absolute(fs_cpath p, fs_error_code *ec)
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return NULL;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
         if (p[0] == '\0') {
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
-                return FS_STR(dup, FS_PREF(""));
+                return FS_DUP(FS_PREF(""));
         }
 
         if (fs_path_is_absolute(p))
-                return FS_STR(dup, p);
+                return FS_DUP(p);
 
 #ifdef _WIN32
-        FS_STACK_PATH_DECLARATION(stackb);
-        FS_CHAR_IT buf = stackb;
-        uint32_t blen = MAX_PATH;
-        DWORD len = (DWORD)blen;
+        if (_is_separator(*p)) {
+                // From libstdc++:
+                // GetFullPathNameW("//") gives unwanted result (PR 88884).
+                // If there are multiple directory separators at the start,
+                // skip all but the last of them.
+                const size_t pos = wcsspn(p, L"/\\");
+                p                = p + pos - 1;
+        }
+
+        DWORD len   = MAX_PATH;
+        fs_path buf = malloc(len * sizeof(wchar_t));
 
         for (;;) {
-                len = GetFullPathNameW(p, len, buf, NULL);
-                if (len == 0) {
+                const DWORD req = GetFullPathNameW(p, len, buf, NULL);
+                if (req == 0) {
                         FS_SYSTEM_ERROR(ec, GetLastError());
-                        return FS_STR(dup, FS_PREF(""));
+                        return FS_WDUP(L"");
                 }
 
-                if (len > blen) {
-                        buf = malloc(len * sizeof(FS_CHAR));
-                        blen = len;
+                if (req > len) {
+                        free(buf);
+                        buf = malloc(req * sizeof(wchar_t));
+                        len = req;
                 } else {
                         break;
                 }
         }
 
-        if (buf == stackb)
-                buf = wcsdup(buf);
-
         return buf;
 #else // _WIN32
-        fs_path abs = fs_current_path(ec);
-        if (ec->code)
-                return NULL;
-
-        path_append_s(abs, p);
-        return abs;
+#error "not implemented"
 #endif // _WIN32
 }
 
@@ -966,10 +1042,10 @@ fs_path fs_canonical(fs_cpath p, fs_error_code *ec)
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return NULL;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
         if (p[0] == '\0')
-                return FS_STR(dup, p);
+                return FS_DUP(p);
 
 #ifdef _WIN32
         _fs_path_kind nameKind;
@@ -977,7 +1053,7 @@ fs_path fs_canonical(fs_cpath p, fs_error_code *ec)
         if (ec->code)
                 return NULL;
 
-        FS_CHAR_IT buf = finalp;
+        const _fs_char_it buf = finalp;
         if (nameKind == _fs_path_kind_Dos) {
                 wchar_t *output = buf;
 
@@ -989,21 +1065,21 @@ fs_path fs_canonical(fs_cpath p, fs_error_code *ec)
                         output += 6;
                 }
 
-                output = wcsdup(output);
+                output = FS_WDUP(output);
                 free(finalp);
                 return output;
-        } else {
-                const wchar_t ntPref[] = L"\\\\?\\GLOBALROOT";
-                // Keep the '\0' char as wcslen(buf) doesn't account for it.
-                const size_t extraLen = sizeof(ntPref) / sizeof(wchar_t);
-
-                wchar_t *out = malloc((extraLen + wcslen(buf)) * sizeof(wchar_t));
-                memcpy(out, ntPref, sizeof(ntPref));
-                wcscat(out, buf);
-
-                free(finalp);
-                return out;
         }
+
+        const wchar_t ntPref[] = L"\\\\?\\GLOBALROOT";
+        // Keep the '\0' char as wcslen(buf) doesn't account for it.
+        const size_t extraLen = sizeof(ntPref) / sizeof(wchar_t);
+
+        wchar_t *out = malloc((extraLen + wcslen(buf)) * sizeof(wchar_t));
+        memcpy(out, ntPref, sizeof(ntPref));
+        wcscat(out, buf);
+
+        free(finalp);
+        return out;
 #else  // _WIN32
 #error "not implemented"
 #endif // _WIN32
@@ -1018,7 +1094,7 @@ fs_path fs_weakly_canonical(fs_cpath p, fs_error_code *ec)
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return FS_FALSE;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
         if (fs_exists(p, ec)) {
                 if (ec->code)
@@ -1027,11 +1103,11 @@ fs_path fs_weakly_canonical(fs_cpath p, fs_error_code *ec)
                 return fs_canonical(p, ec);
         }
 
-        fs_path result = FS_STR(dup, FS_PREF(""));
-        fs_path tmp = NULL; // not used outside while loop
+        fs_path result = FS_DUP(FS_PREF(""));
+        fs_path tmp    = NULL; // not used outside while loop
 
         fs_path_iter iter = fs_path_begin(p);
-        fs_path_iter end = fs_path_end(p);
+        fs_path_iter end  = fs_path_end(p);
 
         while (iter.pos != end.pos) {
                 tmp = fs_path_append(result, FS_DEREF_PATH_ITER(iter));
@@ -1054,7 +1130,7 @@ fs_path fs_weakly_canonical(fs_cpath p, fs_error_code *ec)
         free(tmp);
 
         if (result[0] != '\0') {
-                fs_path can = fs_canonical(result, ec);
+                const fs_path can = fs_canonical(result, ec);
                 free(result);
                 if (ec->code) {
                         FS_DESTROY_PATH_ITER(iter);
@@ -1070,7 +1146,7 @@ fs_path fs_weakly_canonical(fs_cpath p, fs_error_code *ec)
                 fs_path_iter_next(&iter);
         }
 
-        fs_path norm =  fs_path_lexically_normal(result);
+        const fs_path norm = fs_path_lexically_normal(result);
 
         FS_DESTROY_PATH_ITER(iter);
         FS_DESTROY_PATH_ITER(end);
@@ -1087,19 +1163,19 @@ fs_path fs_relative(fs_cpath p, fs_cpath base, fs_error_code *ec)
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return FS_FALSE;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
-        fs_path cpath = fs_weakly_canonical(p, ec);
+        const fs_path cpath = fs_weakly_canonical(p, ec);
         if (ec->code)
                 return NULL;
 
-        fs_path cbase = fs_weakly_canonical(base, ec);
+        const fs_path cbase = fs_weakly_canonical(base, ec);
         if (ec->code) {
                 free(cpath);
                 return NULL;
         }
 
-        fs_path rel = fs_path_lexically_relative(cpath, cbase);
+        const fs_path rel = fs_path_lexically_relative(cpath, cbase);
 
         free(cpath);
         free(cbase);
@@ -1115,7 +1191,7 @@ fs_path fs_proximate(fs_cpath p, fs_cpath base, fs_error_code *ec)
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return FS_FALSE;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
         fs_path cpath = fs_weakly_canonical(p, ec);
         if (ec->code)
@@ -1136,7 +1212,7 @@ fs_path fs_proximate(fs_cpath p, fs_cpath base, fs_error_code *ec)
 
 void fs_copy(fs_cpath from, fs_cpath to, fs_error_code *ec)
 {
-        return fs_copy_opt(from, to, fs_copy_options_none, ec);
+        fs_copy_opt(from, to, fs_copy_options_none, ec);
 }
 
 void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_code *ec)
@@ -1150,7 +1226,7 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
         const fs_bool flink = (options & (fs_copy_options_skip_symlinks | fs_copy_options_copy_symlinks))
                 != fs_copy_options_none;
@@ -1160,13 +1236,13 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
 
         // fs_copy_opt without the option fs_copy_options_directories_only or
         // fs_copy_options_recursive cannot copy sub-directories.
-        if (options & fs_copy_options_in_recursive_copy && _is_directory(ftype)
+        if (options & fs_copy_options_in_recursive_copy && _is_directory_t(ftype)
             && !(options & fs_copy_options_recursive
                 || options & fs_copy_options_directories_only)) {
                 return;
         }
 
-        if (!_exists(ftype)) {
+        if (!_exists_t(ftype)) {
                 FS_CFS_ERROR(ec, fs_err_no_such_file_or_directory);
                 return;
         }
@@ -1177,7 +1253,7 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
         if (ec->code)
                 return;
 
-        if (_exists(ttype)) {
+        if (_exists_t(ttype)) {
                 if (fs_equivalent(from, to, ec) || ec->code) {
                         if (!ec->code)
                                 FS_CFS_ERROR(ec, fs_err_file_exists);
@@ -1195,11 +1271,11 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
                 }
 
                 if (options & fs_copy_options_update_existing) {
-                        fs_file_time_type ftime = fs_last_write_time(from, ec);
+                        const fs_file_time_type ftime = fs_last_write_time(from, ec);
                         if (ec->code)
                                 return;
 
-                        fs_file_time_type ttime = fs_last_write_time(to, ec);
+                        const fs_file_time_type ttime = fs_last_write_time(to, ec);
                         if (ec->code)
                                 return;
 
@@ -1212,49 +1288,50 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
                 }
         }
 
-        const fs_bool fother = _is_other(ftype) && ftype != fs_file_type_junction;
-        const fs_bool tother = _is_other(ttype) && ttype != fs_file_type_junction;
+        const fs_bool fother = _is_other_t(ftype);
+        const fs_bool tother = _is_other_t(ttype);
         if (fother || tother) {
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return;
         }
 
-        if (_is_directory(ftype) && _is_regular_file(ttype)) {
+        if (_is_directory_t(ftype) && _is_regular_file_t(ttype)) {
                 FS_CFS_ERROR(ec, fs_err_is_a_directory);
                 return;
         }
 
-        if (ftype == fs_file_type_junction) {
+#ifdef FS_SYMLINKS_SUPPORTED
+        if (_is_symlink_t(ftype)) {
                 if (options & fs_copy_options_skip_symlinks)
                         return;
 
-                // TODO implement junction copy
-        }
-
-        if (_is_symlink(ftype)) {
-                if (options & fs_copy_options_skip_symlinks)
+                if (options & fs_copy_options_copy_symlinks) {
+                        fs_copy_symlink(from, to, ec);
                         return;
-
-                if (options & fs_copy_options_copy_symlinks)
-                        return fs_copy_symlink(from, to, ec);
+                }
 
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return;
         }
+#endif // FS_SYMLINKS_SUPPORTED
 
-        if (_is_regular_file(ftype)) {
+        if (_is_regular_file_t(ftype)) {
                 if (options & fs_copy_options_directories_only)
                         return;
 
-                if (options & fs_copy_options_create_symlinks)
-                        return fs_create_symlink(from, to, ec);
+                if (options & fs_copy_options_create_symlinks) {
+                        fs_create_symlink(from, to, ec);
+                        return;
+                }
 
-                if (options & fs_copy_options_create_hard_links)
-                        return fs_create_hard_link(from, to, ec);
+                if (options & fs_copy_options_create_hard_links) {
+                        fs_create_hard_link(from, to, ec);
+                        return;
+                }
 
-                if (_is_directory(ttype)) {
-                        fs_path filename = fs_path_filename(from);
-                        fs_path resolved = fs_path_append(to, filename);
+                if (_is_directory_t(ttype)) {
+                        const fs_path filename = fs_path_filename(from);
+                        const fs_path resolved = fs_path_append(to, filename);
                         free(filename);
 
                         fs_copy_file_opt(from, resolved, options, ec);
@@ -1263,16 +1340,17 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
                         return;
                 }
 
-                return fs_copy_file_opt(from, to, options, ec);
+                fs_copy_file_opt(from, to, options, ec);
+                return;
         }
 
-        if (_is_directory(ftype)) {
+        if (_is_directory_t(ftype)) {
                 if (options & fs_copy_options_create_symlinks) {
                         FS_CFS_ERROR(ec, fs_err_is_a_directory);
                         return;
                 }
 
-                if (!_exists(ttype))
+                if (!_exists_t(ttype))
                         fs_create_directory_cp(to, from, ec);
 
                 if (options & fs_copy_options_recursive
@@ -1283,15 +1361,15 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
 
                         options |= fs_copy_options_in_recursive_copy;
                         FOR_EACH_ENTRY_IN_DIR(path, it) {
-                                fs_path file = fs_path_filename(path);
-                                fs_path dest = fs_path_append(to, file);
+                                const fs_path file = fs_path_filename(path);
+                                const fs_path dest = fs_path_append(to, file);
                                 free(file);
 
                                 fs_copy_opt(path, dest, options, ec);
                                 free(dest);
 
                                 if (ec->code)
-                                        return;
+                                        break;
                         }
                         FS_DESTROY_DIR_ITER(it);
                 }
@@ -1300,7 +1378,7 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
 
 void fs_copy_file(fs_cpath from, fs_cpath to, fs_error_code *ec)
 {
-        return fs_copy_opt(from, to, fs_copy_options_none, ec);
+        fs_copy_opt(from, to, fs_copy_options_none, ec);
 }
 
 void fs_copy_file_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_code *ec)
@@ -1312,7 +1390,7 @@ void fs_copy_file_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_er
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
         fs_file_type ftype = fs_symlink_status(from, ec).type;
         if (ec->code)
@@ -1326,7 +1404,7 @@ void fs_copy_file_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_er
         fs_bool freeFrom = FS_FALSE;
 
 #ifdef FS_SYMLINKS_SUPPORTED
-        if (_is_symlink(ftype)) {
+        if (_is_symlink_t(ftype)) {
                 freeFrom = FS_TRUE;
 
                 from = _read_symlink(from, ec);
@@ -1344,7 +1422,7 @@ void fs_copy_file_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_er
                 goto clean;
         }
 
-        if (_exists(ttype)) {
+        if (_exists_t(ttype)) {
                 if (fs_equivalent(from, to, ec) || ec->code) {
                         if (!ec->code)
                                 FS_CFS_ERROR(ec, fs_err_file_exists);
@@ -1403,7 +1481,7 @@ void fs_copy_symlink(fs_cpath from, fs_cpath to, fs_error_code *ec)
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
         fs_path actualPath = fs_read_symlink(from, ec);
         if (ec->code)
@@ -1425,7 +1503,7 @@ fs_bool fs_create_directory(fs_cpath p, fs_error_code *ec)
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return FS_FALSE;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
 #ifdef _WIN32
         if (!CreateDirectoryW(p, NULL)) {
@@ -1448,7 +1526,7 @@ fs_bool fs_create_directory_cp(fs_cpath p, fs_cpath existing_p, fs_error_code *e
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return FS_FALSE;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
 #ifdef _WIN32
         if (!CreateDirectoryExW(existing_p, p, NULL)) {
@@ -1471,7 +1549,7 @@ fs_bool fs_create_directories(fs_cpath p, fs_error_code *ec)
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return FS_FALSE;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
 #ifdef _WIN32
         int r = SHCreateDirectoryExW(NULL, p, NULL);
@@ -1495,7 +1573,7 @@ void fs_create_hard_link(fs_cpath target, fs_cpath link, fs_error_code *ec)
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
 #ifdef _WIN32
         if (!CreateHardLinkW(link, target, NULL))
@@ -1515,12 +1593,11 @@ void fs_create_symlink(fs_cpath target, fs_cpath link, fs_error_code *ec)
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
 #ifdef _WIN32
-        DWORD attrTarget = GetFileAttributesW(target);
-
-        if (!CreateSymbolicLinkW(link, target, attrTarget == FILE_ATTRIBUTE_DIRECTORY))
+        const DWORD attr = GetFileAttributesW(target);
+        if (!CreateSymbolicLinkW(link, target, attr == FILE_ATTRIBUTE_DIRECTORY))
                 FS_SYSTEM_ERROR(ec, GetLastError());
 #else // _WIN32
 #error "not implemented"
@@ -1540,10 +1617,10 @@ void fs_create_directory_symlink(fs_cpath target, fs_cpath link, fs_error_code *
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
 #ifdef _WIN32
-        return fs_create_symlink(target, link, ec);
+        fs_create_symlink(target, link, ec);
 #else // _WIN32
 #error "not implemented"
 #endif // _WIN32
@@ -1555,18 +1632,31 @@ void fs_create_directory_symlink(fs_cpath target, fs_cpath link, fs_error_code *
 fs_path fs_current_path(fs_error_code *ec)
 {
         FS_CLEAR_ERROR_CODE(ec);
-        FS_STACK_PATH_DECLARATION(cwd);
 
 #ifdef _WIN32
-        if (!GetCurrentDirectoryW(MAX_PATH, cwd)) {
-                FS_SYSTEM_ERROR(ec, GetLastError());
-                return NULL;
+        DWORD len   = MAX_PATH;
+        fs_path buf = malloc(len * sizeof(wchar_t));
+
+        for (;;) {
+                const DWORD req = GetCurrentDirectoryW(len, buf);
+                if (req == 0) {
+                        FS_SYSTEM_ERROR(ec, GetLastError());
+                        return FS_WDUP(L"");
+                }
+
+                if (req > len) {
+                        free(buf);
+                        buf = malloc(req * sizeof(wchar_t));
+                        len = req;
+                } else {
+                        break;
+                }
         }
+
+        return buf;
 #else // _WIN32
 #error "not implemented"
 #endif // _WIN32
-
-        return FS_STR(dup, cwd);
 }
 
 void fs_current_path_ch(fs_cpath p, fs_error_code *ec)
@@ -1578,7 +1668,7 @@ void fs_current_path_ch(fs_cpath p, fs_error_code *ec)
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
 #ifdef _WIN32
         if (!SetCurrentDirectoryW(p))
@@ -1590,7 +1680,7 @@ void fs_current_path_ch(fs_cpath p, fs_error_code *ec)
 
 fs_bool fs_exists_s(fs_file_status s)
 {
-        return _exists(s.type);
+        return _exists_t(s.type);
 }
 
 fs_bool fs_exists(fs_cpath p, fs_error_code *ec)
@@ -1602,7 +1692,7 @@ fs_bool fs_exists(fs_cpath p, fs_error_code *ec)
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return FS_FALSE;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
         fs_file_status s = fs_symlink_status(p, ec);
         return fs_exists_s(s) && !ec->code;
@@ -1617,29 +1707,55 @@ fs_bool fs_equivalent(fs_cpath p1, fs_cpath p2, fs_error_code *ec)
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return FS_FALSE;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
-        fs_path cn1 = fs_canonical(p1, ec);
-        if (ec->code)
-                return FS_FALSE;
+#ifdef _WIN32
+        fs_bool out;
+        HANDLE handle1 = NULL;
+        HANDLE handle2 = NULL;
 
-        fs_path cn2 = fs_canonical(p2, ec);
-        if (ec->code) {
-                free(cn1);
+        handle1 = _fs_get_handle(
+                p1, _fs_access_rights_File_read_attributes,
+                _fs_access_rights_File_write_attributes, ec);
+        if (ec->code != fs_err_success) {
                 return FS_FALSE;
         }
 
-        fs_bool equivalent;
-#ifdef _WIN32
-        equivalent = wcscmp(cn1, cn2) == 0;
+        BY_HANDLE_FILE_INFORMATION info1;
+        if (!GetFileInformationByHandle(handle1, &info1)) {
+                FS_SYSTEM_ERROR(ec, GetLastError());
+                out = FS_FALSE;
+                goto deref;
+        }
+
+        handle2 = _fs_get_handle(
+                p2, _fs_access_rights_File_read_attributes,
+                _fs_access_rights_File_write_attributes, ec);
+        if (ec->code != fs_err_success) {
+                out = FS_FALSE;
+                goto deref;
+        }
+
+        BY_HANDLE_FILE_INFORMATION info2;
+        if (!GetFileInformationByHandle(handle2, &info2)) {
+                FS_SYSTEM_ERROR(ec, GetLastError());
+                out = FS_FALSE;
+                goto deref;
+        }
+
+        out = memcmp(&info1, &info2, sizeof(BY_HANDLE_FILE_INFORMATION)) == 0;
+
+deref:
+        if (handle1)
+                CloseHandle(handle1);
+        if (handle2)
+                CloseHandle(handle2);
+
+        return out;
+
 #else // _WIN32
 #error "not implemented"
 #endif // _WIN32
-
-        free(cn1);
-        free(cn2);
-
-        return equivalent;
 }
 
 uintmax_t fs_file_size(fs_cpath p, fs_error_code *ec)
@@ -1651,9 +1767,9 @@ uintmax_t fs_file_size(fs_cpath p, fs_error_code *ec)
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return (uintmax_t)-1;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
-#ifdef _WIN32.
+#ifdef _WIN32
         const HANDLE hFile = _fs_get_handle(
                 p, _fs_access_rights_File_read_attributes,
                 _fs_file_flags_Normal, ec);
@@ -1670,7 +1786,13 @@ uintmax_t fs_file_size(fs_cpath p, fs_error_code *ec)
         CloseHandle(hFile);
         return (uintmax_t)fileSize.QuadPart;
 #else // _WIN32
-#error "not implemented"
+        struct stat status;
+        int err = stat(p, &status);
+        if (err) {
+                FS_SYSTEM_ERROR(ec, err);
+                return (uintmax_t)-1;
+        }
+        return status.st_size;
 #endif // _WIN32
 }
 
@@ -1683,7 +1805,7 @@ uintmax_t fs_hard_link_count(fs_cpath p, fs_error_code *ec)
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return (uintmax_t)-1;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
 #ifdef _WIN32
         const HANDLE hFile = _fs_get_handle(
@@ -1714,7 +1836,7 @@ fs_file_time_type fs_last_write_time(fs_cpath p, fs_error_code *ec)
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return (fs_file_time_type)-1;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
 #ifdef _WIN32
         const HANDLE hFile = _fs_get_handle(
@@ -1730,13 +1852,9 @@ fs_file_time_type fs_last_write_time(fs_cpath p, fs_error_code *ec)
                 return (uint64_t)-1;
         }
 
-        fs_file_time_type time;
-        if (sizeof(FILETIME) == 8)
-                time = ((fs_file_time_type)lastWriteTime.dwHighDateTime << 32)
-                        | lastWriteTime.dwLowDateTime;
-        else
-                time = ((fs_file_time_type)(lastWriteTime.dwHighDateTime & 0xFFFFFFFF) << 32)
-                        | (lastWriteTime.dwLowDateTime & 0xFFFFFFFF);
+        const fs_file_time_type time =
+                ((fs_file_time_type)(lastWriteTime.dwHighDateTime & 0xFFFFFFFF) << 32)
+                | (lastWriteTime.dwLowDateTime & 0xFFFFFFFF);
 
         CloseHandle(hFile);
         return time;
@@ -1754,7 +1872,7 @@ void fs_last_write_time_wr(fs_cpath p, fs_file_time_type new_time, fs_error_code
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
 #ifdef _WIN32
         const HANDLE hFile = _fs_get_handle(
@@ -1782,7 +1900,7 @@ defer:
 
 void fs_permissions(fs_cpath p, fs_perms prms, fs_error_code *ec)
 {
-        return fs_permissions_opt(p, prms, fs_perm_options_replace, ec);
+        fs_permissions_opt(p, prms, fs_perm_options_replace, ec);
 }
 
 void fs_permissions_opt(fs_cpath p, fs_perms prms, fs_perm_options opts, fs_error_code *ec)
@@ -1794,7 +1912,7 @@ void fs_permissions_opt(fs_cpath p, fs_perms prms, fs_perm_options opts, fs_erro
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
         fs_perms oprms = fs_status(p, ec).perms;
         if (ec->code)
@@ -1808,12 +1926,14 @@ void fs_permissions_opt(fs_cpath p, fs_perms prms, fs_perm_options opts, fs_erro
                 readonly = (prms & _fs_perms_All_write) == fs_perms_none;
                 break;
         case fs_perm_options_add: {
-                fs_perms nprms = oprms | (prms & fs_perms_mask);
-                return fs_permissions_opt(p, nprms, fs_perm_options_replace, ec);
+                const fs_perms nprms = oprms | (prms & fs_perms_mask);
+                fs_permissions_opt(p, nprms, fs_perm_options_replace, ec);
+                return;
         }
         case fs_perm_options_remove: {
-                fs_perms nprms = oprms & ~(prms & fs_perms_mask);
-                return fs_permissions_opt(p, nprms, fs_perm_options_replace, ec);
+                const fs_perms nprms = oprms & ~(prms & fs_perms_mask);
+                fs_permissions_opt(p, nprms, fs_perm_options_replace, ec);
+                return;
         }
         case fs_perm_options_nofollow:
 #ifndef _WIN32 // From STL: avoid C4061
@@ -1841,7 +1961,7 @@ fs_path fs_read_symlink(fs_cpath p, fs_error_code *ec)
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return NULL;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
 #ifdef FS_SYMLINKS_SUPPORTED
         if (!fs_is_symlink(p, ec) || ec->code) {
@@ -1851,7 +1971,11 @@ fs_path fs_read_symlink(fs_cpath p, fs_error_code *ec)
                 return NULL;
         }
 
+#ifdef _WIN32
         return _read_symlink(p, ec);
+#else // _WIN32
+#error "not implemented"
+#endif // _WIN32
 #else // FS_SYMLINKS_SUPPORTED
         FS_CFS_ERROR(ec, _fs_err_function_not_supported);
         return NULL;
@@ -1867,7 +1991,7 @@ fs_bool fs_remove(fs_cpath p, fs_error_code *ec)
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return FS_FALSE;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
 #ifdef _WIN32
         fs_file_status status = fs_symlink_status(p, ec);
@@ -1894,7 +2018,7 @@ uintmax_t fs_remove_all(fs_cpath p, fs_error_code *ec)
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return (uintmax_t)-1;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
         uintmax_t count = 0;
         fs_recursive_dir_iter it = fs_recursive_directory_iterator(p, ec);
@@ -1921,7 +2045,7 @@ void fs_rename(fs_cpath old_p, fs_cpath new_p, fs_error_code *ec)
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
 #ifdef _WIN32
         if (!MoveFileW(old_p, new_p))
@@ -1940,7 +2064,7 @@ void fs_resize_file(fs_cpath p, uintmax_t size, fs_error_code *ec)
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
         if (size > INT64_MAX) {
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
@@ -1961,7 +2085,7 @@ void fs_resize_file(fs_cpath p, uintmax_t size, fs_error_code *ec)
         if (ec->code)
                 return;
 
-        LARGE_INTEGER liDistanceToMove = {};
+        LARGE_INTEGER liDistanceToMove = {0};
         liDistanceToMove.QuadPart = (LONGLONG)size;
 
         if (fs_file_size(p, ec) > size) {
@@ -2015,7 +2139,7 @@ fs_space_info fs_space(fs_cpath p, fs_error_code *ec)
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return spaceInfo;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
 #ifdef _WIN32
         struct {
@@ -2055,26 +2179,26 @@ fs_space_info fs_space(fs_cpath p, fs_error_code *ec)
 
 fs_file_status fs_status(fs_cpath p, fs_error_code *ec)
 {
+        FS_CLEAR_ERROR_CODE(ec);
+
 #ifndef NDEBUG
         if (!p) {
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
-                return (fs_file_status){};
+                return (fs_file_status){0};
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
-        FS_CLEAR_ERROR_CODE(ec);
-
-        fs_file_status status = { fs_file_type_none, fs_perms_unknown };
-        fs_cpath str = p;
+        fs_cpath res          = p;
+        fs_file_status status = {0};
 
 #ifdef _WIN32
-        if (fs_path_has_relative_path(p) && !fs_path_has_filename(p))
-                str = fs_path_parent_path(p);
+        if (fs_path_has_relative_path(p) && _is_separator(p[wcslen(p) - 1]))
+                res = fs_path_parent_path(p);
 #endif // _WIN32
 
-        stat_type st;
-        if (FS_STAT(str, &st)) {
-                int err = errno;
+        _fs_stat st;
+        if (FS_STAT(res, &st)) {
+                const int err = errno;
                 if (err == ENOENT || err == ENOTDIR)
                         status.type = fs_file_type_not_found;
 #ifdef EOVERFLOW
@@ -2084,27 +2208,7 @@ fs_file_status fs_status(fs_cpath p, fs_error_code *ec)
                 else
                         FS_SYSTEM_ERROR(ec, err);
         } else {
-                if (S_ISREG(st.st_mode))
-                        status.type = fs_file_type_regular;
-                else if (S_ISDIR(st.st_mode))
-                        status.type = fs_file_type_directory;
-                else if (S_ISCHR(st.st_mode))
-                        status.type = fs_file_type_character;
-                else if (S_ISBLK(st.st_mode))
-                        status.type = fs_file_type_block;
-                else if (S_ISFIFO(st.st_mode))
-                        status.type = fs_file_type_fifo;
-#ifdef S_ISLNK
-                else if (S_ISLNK(st.st_mode))
-                        return fs_file_type_symlink;
-#endif // S_ISLNK
-#ifdef S_ISSOCK
-                else if (S_ISSOCK(st.st_mode))
-                        return fs_file_type_socket;
-#endif // S_ISSOCK
-                else
-                        status.type = fs_file_type_unknown;
-
+                status.type = _get_file_type(p, &st);
                 status.perms = st.st_mode & fs_perms_mask;
         }
 
@@ -2115,17 +2219,32 @@ fs_file_status fs_symlink_status(fs_cpath p, fs_error_code *ec)
 {
         FS_CLEAR_ERROR_CODE(ec);
 
-        fs_file_status status = {
-                .type = fs_file_type_none,
-                .perms = fs_perms_unknown
-        };
-
 #ifndef NDEBUG
         if (!p) {
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
-                return status;
+                return (fs_file_status){0};
         }
-#endif // NDEBUG
+#endif // !NDEBUG
+
+        fs_cpath res          = p;
+        fs_file_status status = {0};
+
+#ifdef _WIN32
+        if (fs_path_has_relative_path(p) && _is_separator(p[wcslen(p) - 1]))
+                res = fs_path_parent_path(p);
+#endif // _WIN32
+
+        _fs_stat st;
+        if (FS_LSTAT(res, &st)) {
+                const int err = errno;
+                if (err == ENOENT || err == ENOTDIR)
+                        status.type = fs_file_type_not_found;
+                else
+                        FS_SYSTEM_ERROR(ec, err);
+        } else {
+                status.type = _get_file_type(p, &st);
+                status.perms = st.st_mode & fs_perms_mask;
+        }
 
         return status;
 }
@@ -2136,29 +2255,32 @@ fs_path fs_temp_directory_path(fs_error_code *ec)
         FS_STACK_PATH_DECLARATION(tmp);
 
 #ifdef _WIN32
-        GetTempPathW(MAX_PATH, tmp);
+        if (!GetTempPathW(MAX_PATH, tmp)) {
+                FS_SYSTEM_ERROR(ec, GetLastError());
+                return FS_DUP("");
+        }
 #else // _WIN32
 #error "not implemented"
 #endif // _WIN32
 
-        return FS_STR(dup, tmp);
+        return FS_DUP(tmp);
 }
 
 fs_bool fs_is_block_file_s(fs_file_status s)
 {
-        return _is_block_file(s.type);
+        return _is_block_file_t(s.type);
 }
 FS_IS_X_FOO_DECL(block_file)
 
 fs_bool fs_is_character_file_s(fs_file_status s)
 {
-        return _is_character_file(s.type);
+        return _is_character_file_t(s.type);
 }
 FS_IS_X_FOO_DECL(character_file)
 
 fs_bool fs_is_directory_s(fs_file_status s)
 {
-        return _is_directory(s.type);
+        return _is_directory_t(s.type);
 }
 FS_IS_X_FOO_DECL(directory)
 
@@ -2171,19 +2293,19 @@ fs_bool fs_is_empty(fs_cpath p, fs_error_code *ec)
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return FS_FALSE;
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
-        fs_file_type type = fs_symlink_status(p, ec).type;
+        const fs_file_type type = fs_symlink_status(p, ec).type;
         if (ec->code)
                 return FS_FALSE;
 
         fs_bool empty;
         if (type == fs_file_type_directory) {
                 fs_dir_iter it = fs_directory_iterator(p, ec);
-                empty = !FS_DEREF_DIR_ITER(it);
+                empty          = !FS_DEREF_DIR_ITER(it);
                 FS_DESTROY_DIR_ITER(it);
         } else {
-                empty =  fs_file_size(p, ec) != 0;
+                empty = fs_file_size(p, ec) != 0;
         }
 
         return ec->code ? FS_FALSE : empty;
@@ -2191,45 +2313,50 @@ fs_bool fs_is_empty(fs_cpath p, fs_error_code *ec)
 
 fs_bool fs_is_fifo_s(fs_file_status s)
 {
-        return _is_fifo(s.type);
+        return _is_fifo_t(s.type);
 }
 FS_IS_X_FOO_DECL(fifo)
 
 fs_bool fs_is_other_s(fs_file_status s)
 {
-        return _is_other(s.type);
+        return _is_other_t(s.type);
 }
 FS_IS_X_FOO_DECL(other)
 
 fs_bool fs_is_regular_file_s(fs_file_status s)
 {
-        return _is_regular_file(s.type);
+        return _is_regular_file_t(s.type);
 }
 FS_IS_X_FOO_DECL(regular_file)
 
 fs_bool fs_is_socket_s(fs_file_status s)
 {
-        return _is_socket(s.type);
+        return _is_socket_t(s.type);
 }
 FS_IS_X_FOO_DECL(socket)
 
 fs_bool fs_is_symlink_s(fs_file_status s)
 {
-        return _is_symlink(s.type);
+        return _is_symlink_t(s.type);
 }
 FS_IS_X_FOO_DECL(symlink)
 
 fs_bool fs_status_known(fs_file_status s)
 {
-        return _status_known(s.type);
+        return _status_known_t(s.type);
 }
 
 // -------- fs_path
 
 fs_path fs_path_append(fs_cpath p, fs_cpath other)
 {
-        fs_path out = FS_STR(dup, p);
-        _path_append_s(&out, other, FS_TRUE);
+#ifndef NDEBUG
+        if (!p || !other)
+                return NULL;
+#endif // !NDEBUG
+
+        fs_path out = FS_DUP(p);
+        fs_path_append_s(&out, other);
         return out;
 }
 
@@ -2238,27 +2365,38 @@ fs_path _fs_path_appendv(int c, ...)
         va_list l;
         va_start(l, c);
 
-        fs_path out = FS_STR(dup, va_arg(l, fs_cpath));
+        fs_path out = FS_DUP(va_arg(l, fs_cpath));
         if (c == 1)
                 return out;
 
         for (int i = 1; i < c; ++i)
-                _path_append_s(&out, va_arg(l, fs_cpath), FS_TRUE);
+                fs_path_append_s(&out, va_arg(l, fs_cpath));
 
         va_end(l);
         return out;
 }
 
-void fs_path_append_s(fs_path *pp, fs_cpath other) {
+void fs_path_append_s(fs_path *pp, fs_cpath other)
+{
+#ifndef NDEBUG
+        if (!pp || !*pp || !other)
+                return;
+#endif // !NDEBUG
+
         _path_append_s(pp, other, FS_TRUE);
 }
 
 fs_path fs_path_concat(fs_cpath p, fs_cpath other)
 {
+#ifndef NDEBUG
+        if (!p || !other)
+                return NULL;
+#endif // !NDEBUG
+
         const size_t len1 = FS_STR(len, p);
         const size_t len2 = FS_STR(len, other) + 1 /* '\0' */;
+        const fs_path out = malloc((len1 + len2) * sizeof(FS_CHAR));
 
-        fs_path out = malloc((len1 + len2) * sizeof(FS_CHAR));
         FS_STR(cpy, out, p);
         FS_STR(cpy, out + len1, other);
 
@@ -2267,6 +2405,11 @@ fs_path fs_path_concat(fs_cpath p, fs_cpath other)
 
 void fs_path_concat_s(fs_path *pp, fs_cpath other)
 {
+#ifndef NDEBUG
+        if (!pp || !*pp || !other)
+                return;
+#endif // !NDEBUG
+
         fs_path p = *pp;
         *pp = fs_path_concat(p, other);
         free(p);
@@ -2274,45 +2417,56 @@ void fs_path_concat_s(fs_path *pp, fs_cpath other)
 
 void fs_path_clear(fs_path *pp)
 {
+#ifndef NDEBUG
+        if (!pp || !*pp)
+                return;
+#endif // !NDEBUG
+
         free(*pp);
         *pp = NULL;
 }
 
 void fs_path_make_preferred(fs_path *pp)
 {
-        fs_path p = *pp;
+#ifndef NDEBUG
+        if (!pp || !*pp)
+                return;
+#endif // !NDEBUG
 
-        for (uint32_t i = 0; i < FS_STR(len, p); ++i) {
 #ifdef _WIN32
+        const fs_path p = *pp;
+        for (uint32_t i = 0; i < FS_STR(len, p); ++i) {
                 if (p[i] == L'/')
                         p[i] = FS_PREFERRED_SEPARATOR;
-#else // _WIN32
-#error "not implemented"
-#endif // _WIN32
         }
+#endif // _WIN32
 }
 
 void fs_path_remove_filename(fs_path *pp)
 {
-        fs_path p = *pp;
-
-        FS_CHAR_IT file = (FS_CHAR_IT) _find_filename(p);
-        *file = '\0';
+#ifndef NDEBUG
+        if (!pp || !*pp)
+                return;
+#endif // !NDEBUG
+        
+        const fs_path p        = *pp;
+        const _fs_char_it file = (_fs_char_it)_find_filename(p);
+        *file                  = '\0';
 }
 
 void fs_path_replace_filename(fs_path *pp, fs_cpath replacement, fs_error_code *ec)
 {
         FS_CLEAR_ERROR_CODE(ec);
-        fs_path p = *pp;
 
 #ifndef NDEBUG
-        if (!p || !replacement) {
+        if (!pp || !*pp || !replacement) {
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return;
         }
-#endif // NDEBUG
-
+#endif // !NDEBUG
+        
         FS_STACK_PATH_DECLARATION(out);
+        const fs_path p = *pp;
 
         fs_path_remove_filename(pp);
         FS_STR(cpy, out, p);
@@ -2320,26 +2474,25 @@ void fs_path_replace_filename(fs_path *pp, fs_cpath replacement, fs_error_code *
         const size_t len = FS_STR(len, p) + 1 /* '\0' */; // path without filename
         FS_STR(cpy, out + len, replacement);
 
-        *pp = FS_STR(dup, out);
+        *pp = FS_DUP(out);
         free(p);
 }
 
 void fs_path_replace_extension(fs_path *pp, fs_cpath replacement, fs_error_code *ec)
 {
         FS_CLEAR_ERROR_CODE(ec);
-        fs_path p = *pp;
 
 #ifndef NDEBUG
-        if (!p || !replacement) {
+        if (!pp || !*pp || !replacement) {
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 return;
         }
 #endif // !NDEBUG
 
-        // Remove the extension
-        fs_path ext = fs_path_extension(p);
-        size_t newpl = FS_STR(len, p) - FS_STR(len, ext);
-        p[newpl] = FS_PREF('\0');
+        const fs_path p   = *pp;
+        const fs_path ext = fs_path_extension(p);
+        size_t newpl      = FS_STR(len, p) - FS_STR(len, ext);
+        p[newpl]          = FS_PREF('\0');
         free(ext);
 
         const size_t rpll = FS_STR(len, replacement);
@@ -2347,23 +2500,30 @@ void fs_path_replace_extension(fs_path *pp, fs_cpath replacement, fs_error_code 
                 return;
 
         // The replacement may not contain a dot.
-        p[newpl] = FS_PREF('.');
+        p[newpl]     = FS_PREF('.');
         p[newpl + 1] = FS_PREF('\0');
-        newpl += (replacement[0] != FS_PREF('.'));
+        newpl       += replacement[0] != FS_PREF('.');
 
         FS_STACK_PATH_DECLARATION(out);
         FS_STR(cpy, out, p);
         FS_STR(cpy, out + newpl, replacement);
 
-        *pp = FS_STR(dup, out);
+        *pp = FS_DUP(out);
         free(p);
 }
 
 int fs_path_compare(fs_cpath p, fs_cpath other)
 {
-        fs_path prt = fs_path_root_name(p);
-        fs_path ort = fs_path_root_name(other);
-        const int rtcmp = FS_STR(cmp, prt, ort);
+#ifndef NDEBUG
+        if (!p || !other)
+                return 0;
+#endif // !NDEBUG
+
+        // TODO: this can be optimized to avoid multiple parsing
+
+        const fs_path prt = fs_path_root_name(p);
+        const fs_path ort = fs_path_root_name(other);
+        const int rtcmp   = FS_STR(cmp, prt, ort);
 
         free(prt);
         free(ort);
@@ -2376,9 +2536,9 @@ int fs_path_compare(fs_cpath p, fs_cpath other)
         if (phasrtd != ohasrtd)
                 return phasrtd - ohasrtd;
 
-        fs_path prl = fs_path_relative_path(p);
-        fs_path orl = fs_path_relative_path(other);
-        const int rlcmp = FS_STR(cmp, prl, orl);
+        const fs_path prl = fs_path_relative_path(p);
+        const fs_path orl = fs_path_relative_path(other);
+        const int rlcmp   = FS_STR(cmp, prl, orl);
 
         free(prl);
         free(orl);
@@ -2392,21 +2552,20 @@ fs_path fs_path_lexically_normal(fs_cpath p)
                 return NULL;
 #endif // !NDEBUG
 
-        const FS_CHAR empty[1] = FS_PREF("");
-        const FS_CHAR dot[2] = FS_PREF(".");
+        const FS_CHAR empty[1]  = FS_PREF("");
+        const FS_CHAR dot[2]    = FS_PREF(".");
         const FS_CHAR dotDot[3] = FS_PREF("..");
 
         // 1. If the path is empty, stop (normal form of an empty path is an empty path).
         if (p[0] == FS_PREF('\0'))
-                return FS_STR(dup, FS_PREF(""));
+                return FS_DUP(FS_PREF(""));
 
-        const size_t plen = FS_STR(len, p);
-        FS_CHAR_CIT last = p + plen;
-        FS_CHAR_CIT rtnend = _find_root_name_end(p);
+        const size_t plen         = FS_STR(len, p);
+        const _fs_char_cit last   = p + plen;
+        const _fs_char_cit rtnend = _find_root_name_end(p);
+        const size_t rtlen        = rtnend - p;
 
-        const size_t rtlen = rtnend - p;
-
-        fs_path norm = malloc((plen + 1) * sizeof(FS_CHAR)); // allocate buffer for the whole path
+        const fs_path norm = malloc((plen + 1) * sizeof(FS_CHAR));
         memcpy(norm, p, rtlen * sizeof(FS_CHAR));
         norm[rtlen] = '\0';
 
@@ -2416,8 +2575,6 @@ fs_path fs_path_lexically_normal(fs_cpath p)
 #ifdef _WIN32
                 if (norm[i] == L'/')
                         norm[i] = FS_PREFERRED_SEPARATOR;
-#else // _WIN32
-#error "not implemented"
 #endif // _WIN32
         }
 
@@ -2426,10 +2583,10 @@ fs_path fs_path_lexically_normal(fs_cpath p)
                 sepcount += _is_separator(p[i]);
 
         if (!sepcount)
-                return FS_STR(dup, p);
+                return FS_DUP(p);
 
         typedef struct {
-                FS_CHAR_CIT it;
+                _fs_char_cit it;
                 uint32_t count;
 
         } fs_view;
@@ -2439,7 +2596,7 @@ fs_path fs_path_lexically_normal(fs_cpath p)
         uint32_t vecIdx = 0; // can be used as a size if vec[vecIdx++] is used.
 
         fs_bool hasrtdir = FS_FALSE; // true: there is a slash right after root-name.
-        FS_CHAR_CIT ptr = rtnend;
+        _fs_char_cit ptr = rtnend;
 
 #ifdef _WIN32
         if (ptr != last && _is_separator(*ptr)) {
@@ -2462,8 +2619,8 @@ fs_path fs_path_lexically_normal(fs_cpath p)
                         continue;
                 }
 
-                FS_CHAR_CIT fileEnd = ptr + 1;
-                while (*fileEnd && !_is_separator(*fileEnd)) // find_if
+                _fs_char_cit fileEnd = ptr + 1;
+                while (*fileEnd && !_is_separator(*fileEnd))
                         ++fileEnd;
 
                 vec[vecIdx++] = (fs_view){ ptr, (uint32_t)(fileEnd - ptr) };
@@ -2478,8 +2635,8 @@ fs_path fs_path_lexically_normal(fs_cpath p)
         // directory-separators immediately following them.
         fs_view *newEnd = vec;
         fs_view *vecEnd = vec + vecIdx;
-        for (fs_view *pos = vec; pos != vecEnd;) {
-                fs_view elem = *pos++;
+        for (const fs_view *pos = vec; pos != vecEnd;) {
+                const fs_view elem = *pos++;
                 if (FS_STR(ncmp, elem.it, dot, 1) == 0) {
                         if (pos == vecEnd)
                                 break;
@@ -2489,7 +2646,7 @@ fs_path fs_path_lexically_normal(fs_cpath p)
                                 break;
 
                         ++newEnd;
-                } else { // ..
+                } else {
                         if (newEnd != vec && FS_STR(ncmp, newEnd[-2].it, dotDot, 2) != 0) {
                                 newEnd -= 2;
                                 if (pos == vecEnd)
@@ -2509,15 +2666,15 @@ fs_path fs_path_lexically_normal(fs_cpath p)
         }
 
         for (fs_view *it = newEnd; it < vecEnd; ++it)
-                *it = (fs_view){};
+                *it = (fs_view){0};
 
         vecEnd = newEnd;
 
         // 7. If the last filename is dot-dot, remove any trailing directory-separator.
         if (vecEnd - vec >= 2 && vecEnd[-1].count == 0 && FS_STR(ncmp, vecEnd[-2].it, dotDot, 2) == 0)
-                *--vecEnd = (fs_view){};
+                *--vecEnd = (fs_view){0};
 
-        for (fs_view *it = vec; it < vecEnd; ++it) {
+        for (const fs_view *it = vec; it < vecEnd; ++it) {
                 if (it->count == 0)
                         FS_STR(cat, norm, FS_PREFERRED_SEPARATOR_S);
                 else
@@ -2536,8 +2693,10 @@ fs_path fs_path_lexically_normal(fs_cpath p)
 
 fs_path fs_path_lexically_relative(fs_cpath p, fs_cpath base)
 {
+        fs_path out;
+
 #ifndef NDEBUG
-        if (!p)
+        if (!p || !base)
                 return NULL;
 #endif // !NDEBUG
 
@@ -2547,26 +2706,84 @@ fs_path fs_path_lexically_relative(fs_cpath p, fs_cpath base)
         // is true or any filename in fs_path_relative_path(p) or
         // fs_path_relative_path(base) can be interpreted as a root-name,
         // returns a default-constructed path.
-        FS_CHAR_CIT rtnend  = _find_root_name_end(p);
-        FS_CHAR_CIT brtnend = _find_root_name_end(base);
-        FS_CHAR_CIT rtdend  = _find_root_directory_end(p);
-        FS_CHAR_CIT brtdend = _find_root_directory_end(base);
+        const _fs_char_cit rtnend  = _find_root_name_end(p);
+        const _fs_char_cit brtnend = _find_root_name_end(base);
+        _fs_char_cit rtdend;
+        _fs_char_cit brtdend;
         if (rtnend - p != brtnend - base || FS_STR(ncmp, p, base, rtnend - p) != 0
-            || (p - rtnend != 0 && rtdend != rtnend) != (p - brtnend != 0 && brtdend != brtnend)
-            || (rtdend - rtnend != 0) != (brtdend - brtnend != 0))
-                return FS_STR(dup, FS_PREF(""));
+            || _is_absolute(p, rtnend, &rtdend) != _is_absolute(base, brtnend, &brtdend)
+            || (!_has_root_dir(rtnend, rtdend) && _has_root_dir(brtnend, brtdend))
+            || (_relative_path_contains_root_name(p) || _relative_path_contains_root_name(base)))
+                return FS_DUP(FS_PREF(""));
 
-#error "not implemented"
+        fs_path_iter pit  = fs_path_begin(p);
+        fs_path_iter bit  = fs_path_begin(base);
+        fs_path_iter pend = fs_path_end(p);
+        fs_path_iter bend = fs_path_end(base);
+        int bdist         = 0;
+
+        while (pit.pos != pend.pos && bit.pos != bend.pos
+            && FS_STR(cmp, FS_DEREF_PATH_ITER(pit), FS_DEREF_PATH_ITER(bit)) == 0) {
+                fs_path_iter_next(&pit);
+                fs_path_iter_next(&bit);
+                ++bdist;
+        }
+
+        if (pit.pos == pend.pos && bit.pos == bend.pos) {
+                out = FS_DUP(FS_PREF("."));
+                goto defer;
+        }
+
+        const ptrdiff_t brdist = _has_root_name(base, brtnend) + _has_root_dir(brtnend, brtdend);
+        while (bdist < brdist) {
+                fs_path_iter_next(&bit);
+                ++bdist;
+        }
+
+        int n = 0;
+        FOR_EACH_PATH_ITER(bit) {
+                const _fs_char_cit elem = FS_DEREF_PATH_ITER(bit);
+
+                if (elem[0] == FS_PREF('\0') || FS_STR(cmp, elem, FS_PREF(".")) == 0)
+                        continue;
+                if (FS_STR(len, elem) >= 2 && FS_STR(cmp, elem, FS_PREF("..")) == 0)
+                        --n;
+                else
+                        ++n;
+        }
+
+        if (n < 0) {
+                out = FS_DUP(FS_PREF(""));
+                goto defer;
+        }
+
+        if (n == 0 && FS_DEREF_PATH_ITER(pit)[0] == '\0') {
+                out = FS_DUP(FS_PREF("."));
+                goto defer;
+        }
+
+        out = FS_DUP(FS_PREF(""));
+        for (int i = 0; i < n; ++i)
+                _path_append_s(&out, FS_PREF(".."), FS_TRUE);
+        FOR_EACH_PATH_ITER(pit)
+                _path_append_s(&out, FS_DEREF_PATH_ITER(pit), FS_TRUE);
+
+defer:
+        FS_DESTROY_PATH_ITER(pit);
+        FS_DESTROY_PATH_ITER(bit);
+        FS_DESTROY_PATH_ITER(pend);
+        FS_DESTROY_PATH_ITER(bend);
+        return out;
 }
 
 fs_path fs_path_lexically_proximate(fs_cpath p, fs_cpath base)
 {
-        fs_path rel = fs_path_lexically_relative(p, base);
-        if (rel[0] != FS_PREF('\0'))
+        const fs_path rel = fs_path_lexically_relative(p, base);
+        if (rel && rel[0] != FS_PREF('\0'))
                 return rel;
 
         free(rel);
-        return FS_STR(dup, p);
+        return FS_DUP(p);
 }
 
 fs_path fs_path_root_name(fs_cpath p)
@@ -2576,19 +2793,20 @@ fs_path fs_path_root_name(fs_cpath p)
 
 fs_bool fs_path_has_root_name(fs_cpath p)
 {
-        return _find_root_name_end(p) - p != 0 ? FS_TRUE : FS_FALSE;
+        return _has_root_name(p, _find_root_name_end(p));
 }
 
 fs_path fs_path_root_directory(fs_cpath p)
 {
-        FS_CHAR_CIT rtend = _find_root_name_end(p);
-        return _dupe_string(rtend, _find_root_directory_end(rtend));
+        const _fs_char_cit rtnend = _find_root_name_end(p);
+        return _dupe_string(rtnend, _find_root_directory_end(rtnend));
 }
 
 fs_bool fs_path_has_root_directory(fs_cpath p)
 {
-        FS_CHAR_CIT rtend = _find_root_name_end(p);
-        return _find_root_directory_end(p) - rtend != 0 ? FS_TRUE : FS_FALSE;
+        const _fs_char_cit rtnend = _find_root_name_end(p);
+        const _fs_char_cit rtdend = _find_root_directory_end(rtnend);
+        return _has_root_dir(rtnend, rtdend);
 }
 
 fs_path fs_path_root_path(fs_cpath p)
@@ -2603,16 +2821,15 @@ fs_bool fs_path_has_root_path(fs_cpath p)
 
 fs_path fs_path_relative_path(fs_cpath p)
 {
-        FS_CHAR_CIT last = p + FS_STR(len, p);
-        FS_CHAR_CIT rel = _find_relative_path(p);
-
+        const _fs_char_cit last = p + FS_STR(len, p);
+        const _fs_char_cit rel  = _find_relative_path(p);
         return _dupe_string(rel, last);
 }
 
 fs_bool fs_path_has_relative_path(fs_cpath p)
 {
-        FS_CHAR_CIT last = p + FS_STR(len, p);
-        FS_CHAR_CIT rel = _find_relative_path(p);
+        const _fs_char_cit last = p + FS_STR(len, p);
+        const _fs_char_cit rel  = _find_relative_path(p);
         return last - rel != 0 ? FS_TRUE : FS_FALSE;
 }
 
@@ -2628,65 +2845,49 @@ fs_bool fs_path_has_parent_path(fs_cpath p)
 
 fs_path fs_path_filename(fs_cpath p)
 {
-        FS_CHAR_CIT last = p + FS_STR(len, p);
-        FS_CHAR_CIT file = _find_filename(p);
-
+        const _fs_char_cit last = p + FS_STR(len, p);
+        const _fs_char_cit file = _find_filename(p);
         return _dupe_string(file, last);
 }
 
 fs_bool fs_path_has_filename(fs_cpath p)
 {
-        FS_CHAR_CIT last = p + FS_STR(len, p);
-        FS_CHAR_CIT file = _find_filename(p);
-
+        const _fs_char_cit last = p + FS_STR(len, p);
+        const _fs_char_cit file = _find_filename(p);
         return last - file != 0 ? FS_TRUE : FS_FALSE;
 }
 
 fs_path fs_path_stem(fs_cpath p)
 {
-        FS_CHAR_CIT file = _find_filename(p);
-        FS_CHAR_CIT ads = FS_STR(chr, file, FS_PREF(':'));
-        FS_CHAR_CIT ext = _find_extension(p, ads);
-
+        const _fs_char_cit file = _find_filename(p);
+        const _fs_char_cit ext  = _find_extension(p, NULL);
         return _dupe_string(file, ext);
 }
 
 fs_bool fs_path_has_stem(fs_cpath p)
 {
-        FS_CHAR_CIT file = _find_filename(p);
-        FS_CHAR_CIT ads = FS_STR(chr, file, FS_PREF(':'));
-        FS_CHAR_CIT ext = _find_extension(p, ads);
-
+        const _fs_char_cit file = _find_filename(p);
+        const _fs_char_cit ext  = _find_extension(p, NULL);
         return ext - file != 0 ? FS_TRUE : FS_FALSE;
 }
 
 fs_path fs_path_extension(fs_cpath p)
 {
-        FS_CHAR_CIT file = _find_filename(p);
-        FS_CHAR_CIT ads = FS_STR(chr, file, FS_PREF(':'));
-        FS_CHAR_CIT ext = _find_extension(p, ads);
-
-        return _dupe_string(ext, ads);
+        _fs_char_cit end;
+        const _fs_char_cit ext = _find_extension(p, &end);
+        return _dupe_string(ext, end);
 }
 
 fs_bool fs_path_has_extension(fs_cpath p)
 {
-        FS_CHAR_CIT file = _find_filename(p);
-        FS_CHAR_CIT ads = FS_STR(chr, file, FS_PREF(':'));
-        FS_CHAR_CIT ext = _find_extension(p, ads);
-
-        return ads - ext != 0 ? FS_TRUE : FS_FALSE;
+        _fs_char_cit end;
+        const _fs_char_cit ext = _find_extension(p, &end);
+        return end - ext != 0 ? FS_TRUE : FS_FALSE;
 }
 
 fs_bool fs_path_is_absolute(fs_cpath p)
 {
-#ifdef _WIN32
-        FS_CHAR_CIT rtnend = _find_root_name_end(p);
-        // fs_path_has_root_name && fs_path_has_root_directory
-        return p - rtnend != 0 && _find_root_directory_end(rtnend) != rtnend;
-#else // _WIN32
-        return fs_path_has_root_directory(p);
-#endif // _WIN32
+        return _is_absolute(p, _find_root_name_end(p), NULL);
 }
 
 fs_bool fs_path_is_relative(fs_cpath p)
@@ -2696,11 +2897,11 @@ fs_bool fs_path_is_relative(fs_cpath p)
 
 fs_path_iter fs_path_begin(fs_cpath p)
 {
-        FS_CHAR_CIT rtnend = _find_root_name_end(p);
+        const _fs_char_cit rtnend = _find_root_name_end(p);
 
-        FS_CHAR_CIT fend;
+        _fs_char_cit fend;
         if (p == rtnend) {
-                FS_CHAR_CIT rtdend = rtnend;
+                _fs_char_cit rtdend = rtnend;
                 while (*rtnend && _is_separator(*rtdend))
                         ++rtdend;
 
@@ -2716,8 +2917,8 @@ fs_path_iter fs_path_begin(fs_cpath p)
         }
 
         return (fs_path_iter){
-                .pos = p,
-                .elem = _dupe_string(p, fend),
+                .pos   = p,
+                .elem  = _dupe_string(p, fend),
                 .begin = p
         };
 }
@@ -2725,8 +2926,8 @@ fs_path_iter fs_path_begin(fs_cpath p)
 fs_path_iter fs_path_end(fs_cpath p)
 {
         return (fs_path_iter){
-                .pos = p + FS_STR(len, p),
-                .elem = FS_STR(dup, FS_PREF("")),
+                .pos   = p + FS_STR(len, p),
+                .elem  = FS_DUP(FS_PREF("")),
                 .begin = p
         };
 }
@@ -2737,13 +2938,13 @@ fs_path_iter fs_path_end(fs_cpath p)
 
 void fs_path_iter_next(fs_path_iter *it)
 {
-        const size_t len = FS_STR(len, FS_DEREF_PATH_ITER(*it));
-        FS_CHAR_CIT last = it->begin + FS_STR(len, it->begin);
+        const size_t len        = FS_STR(len, FS_DEREF_PATH_ITER(*it));
+        const _fs_char_cit last = it->begin + FS_STR(len, it->begin);
 
         if (it->pos == it->begin) {
-                it->pos += len;
-                FS_CHAR_CIT rtnend = _find_root_name_end(it->begin);
-                FS_CHAR_CIT rtdend = rtnend;
+                it->pos                  += len;
+                const _fs_char_cit rtnend = _find_root_name_end(it->begin);
+                _fs_char_cit rtdend       = rtnend;
                 while (*rtdend && _is_separator(*rtdend))
                         ++rtdend;
 
@@ -2765,7 +2966,7 @@ void fs_path_iter_next(fs_path_iter *it)
 
         if (it->pos == last) {
                 free(FS_DEREF_PATH_ITER(*it));
-                FS_DEREF_PATH_ITER(*it) = FS_STR(dup, FS_PREF(""));
+                FS_DEREF_PATH_ITER(*it) = FS_DUP(FS_PREF(""));
                 return;
         }
 
@@ -2773,12 +2974,12 @@ void fs_path_iter_next(fs_path_iter *it)
                 if (++it->pos == last) {
                         --it->pos;
                         free(FS_DEREF_PATH_ITER(*it));
-                        FS_DEREF_PATH_ITER(*it) = FS_STR(dup, FS_PREF(""));
+                        FS_DEREF_PATH_ITER(*it) = FS_DUP(FS_PREF(""));
                         return;
                 }
         }
 
-        FS_CHAR_CIT e = it->pos;
+        _fs_char_cit e = it->pos;
         while (*e && !_is_separator(*e))
                 ++e;
 
@@ -2788,11 +2989,11 @@ void fs_path_iter_next(fs_path_iter *it)
 
 void fs_path_iter_prev(fs_path_iter *it)
 {
-        const size_t len = FS_STR(len, it->begin);
-        FS_CHAR_CIT last = it->begin + len;
+        const size_t len        = FS_STR(len, it->begin);
+        const _fs_char_cit last = it->begin + len;
 
-        FS_CHAR_CIT rtnend = _find_root_name_end(it->begin);
-        FS_CHAR_CIT rtdend = rtnend;
+        const _fs_char_cit rtnend = _find_root_name_end(it->begin);
+        _fs_char_cit rtdend       = rtnend;
         while (*rtdend && _is_separator(*rtdend))
                 ++rtdend;
 
@@ -2818,7 +3019,7 @@ void fs_path_iter_prev(fs_path_iter *it)
                 --it->pos;
 
                 free(FS_DEREF_PATH_ITER(*it));
-                FS_DEREF_PATH_ITER(*it) = FS_STR(dup, FS_PREF(""));
+                FS_DEREF_PATH_ITER(*it) = FS_DUP(FS_PREF(""));
 
                 return;
         }
@@ -2841,9 +3042,9 @@ fs_dir_iter fs_directory_iterator(fs_cpath p, fs_error_code *ec)
 #ifndef NDEBUG
         if (!p) {
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
-                return (fs_dir_iter){};
+                return (fs_dir_iter){0};
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
         fs_cpath *elems;
 
@@ -2855,11 +3056,11 @@ fs_dir_iter fs_directory_iterator(fs_cpath p, fs_error_code *ec)
         WIN32_FIND_DATAW findFileData;
         HANDLE hFind = FindFirstFileW(searchPath, &findFileData);
         if (hFind == INVALID_HANDLE_VALUE) {
-                DWORD err = GetLastError();
+                const DWORD err = GetLastError();
                 if (err != ERROR_FILE_NOT_FOUND)
                         FS_SYSTEM_ERROR(ec, GetLastError());
 
-                return (fs_dir_iter){};
+                return (fs_dir_iter){0};
         }
 
         uint32_t count = 0;
@@ -2870,7 +3071,7 @@ fs_dir_iter fs_directory_iterator(fs_cpath p, fs_error_code *ec)
         FindClose(hFind);
 
         if (!count)
-                return (fs_dir_iter){};
+                return (fs_dir_iter){0};
 
         // allocate one extra space for the NULL iterator
         elems = malloc((count + 1) * sizeof(fs_cpath));
@@ -2888,8 +3089,8 @@ fs_dir_iter fs_directory_iterator(fs_cpath p, fs_error_code *ec)
                 if (wcscmp(findFileData.cFileName, L".") != 0 && wcscmp(findFileData.cFileName, L"..") != 0) {
                         // using search path as a buffer to avoid allocs.
                         _path_append_s(&base, findFileData.cFileName, FS_FALSE);
-                        elems[count++] = FS_STR(dup, base);
-                        base[len] = '\0'; // restore p every time
+                        elems[count++] = FS_DUP(base);
+                        base[len]      = '\0'; // restore p every time
                 }
         } while (FindNextFileW(hFind, &findFileData));
         FindClose(hFind);
@@ -2902,7 +3103,7 @@ fs_dir_iter fs_directory_iterator(fs_cpath p, fs_error_code *ec)
 #else // _WIN32
 #error "not implemented"
 #endif // _WIN32
-};
+}
 
 void fs_dir_iter_next(fs_dir_iter *it)
 {
@@ -2926,9 +3127,9 @@ fs_recursive_dir_iter fs_recursive_directory_iterator_opt(fs_cpath p, fs_directo
 #ifndef NDEBUG
         if (!p) {
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
-                return (fs_dir_iter){};
+                return (fs_dir_iter){0};
         }
-#endif // NDEBUG
+#endif // !NDEBUG
 
 #ifdef _WIN32
         // Need this to be 1 or 0.
@@ -2936,15 +3137,15 @@ fs_recursive_dir_iter fs_recursive_directory_iterator_opt(fs_cpath p, fs_directo
 
         uint32_t count = _recursive_count(p, follow_symlinks, ec);
         if (!count) // both for errors and empty dirs
-                return (fs_dir_iter){};
+                return (fs_dir_iter){0};
 
-        // allocate one extra space for the NULL iterator
+        // allocate one extra space for the NULL (end) iterator
         fs_cpath *elems = malloc((count + 1) * sizeof(fs_cpath));
 
         count = _recursive_entries(p, follow_symlinks, elems, ec);
         if (ec->code) {
                 free(elems);
-                return (fs_dir_iter){};
+                return (fs_dir_iter){0};
         }
 
         elems[count] = NULL;
@@ -2966,8 +3167,6 @@ fs_recursive_dir_iter fs_recursive_directory_iterator_opt(fs_cpath p, fs_directo
 #undef FS_CLEAR_ERROR_CODE
 #undef FS_CFS_ERROR
 #undef FS_SYSTEM_ERROR
-#undef FS_CHAR_CIT
-#undef FS_CHAR_IT
 
 #undef FS_MAX_PATH
 #undef FS_STR

@@ -1,0 +1,167 @@
+# Version alpha-1.0.0
+
+ - [ ] std::filesystem API
+   - [ ] fs_absolute
+     - [X] Windows
+     - [ ] Linux
+   - [ ] fs_canonical
+     - [X] Windows
+     - [ ] Linux
+   - [X] fs_weakly_canonical
+   - [X] fs_relative
+   - [X] fs_proximate
+   - [X] fs_copy
+   - [X] fs_copy_opt
+   - [X] fs_copy_file
+   - [ ] fs_copy_file_opt
+     - [X] Windows
+     - [ ] Linux
+   - [ ] fs_copy_symlink
+     - [X] Windows
+     - [ ] Linux
+   - [ ] fs_create_directory
+     - [X] Windows
+     - [ ] Linux
+   - [ ] ds_create_directory_cp
+     - [X] Windows
+     - [ ] Linux
+   - [ ] fs_create_directories
+     - [X] Windows
+     - [ ] Linux
+   - [ ] fs_create_hard_link
+     - [X] Windows
+     - [ ] Linux
+   - [ ] fs_create_symlink
+     - [X] Windows
+     - [ ] Linux
+   - [ ] fs_create_directory_symlink
+     - [X] Windows
+     - [ ] Linux
+   - [ ] fs_current_path
+     - [X] Windows
+     - [ ] Linux
+   - [ ] fs_current_path_ch
+     - [X] Windows
+     - [ ] Linux
+   - [X] fs_exists_s
+   - [X] fs_exists
+   - [ ] fs_equivalent
+     - [X] Windows
+     - [ ] Linux
+   - [X] fs_file_size
+   - [ ] fs_hard_link_count
+     - [X] Windows
+     - [ ] Linux
+   - [ ] fs_last_write_time
+     - [X] Windows
+     - [ ] Linux
+   - [ ] fs_last_write_time_wr
+     - [X] Windows
+     - [ ] Linux
+   - [X] fs_permissions
+   - [ ] fs_permissions_opt
+     - [X] Windows
+     - [ ] Linux
+   - [ ] fs_read_symlink
+     - [X] Windows
+     - [ ] Linux
+   - [ ] fs_remove
+     - [X] Windows
+     - [ ] Linux
+   - [X] fs_remove_all
+   - [ ] fs_rename
+     - [X] Windows
+     - [ ] Linux
+   - [ ] fs_resize_file
+     - [X] Windows
+     - [ ] Linux
+   - [ ] fs_space
+     - [X] Windows
+     - [ ] Linux
+   - [ ] fs_status
+     - [X] Windows
+     - [ ] Linux
+   - [ ] fs_symlink_status
+     - [X] Windows
+     - [ ] Linux
+   - [ ] fs_temp_directory_path
+     - [X] Windows
+     - [ ] Linux
+   - [X] fs_is_block_file_s
+   - [X] fs_is_block_file
+   - [X] fs_is_character_file_s
+   - [X] fs_is_character_file
+   - [X] fs_is_directory_s
+   - [X] fs_is_directory
+   - [X] fs_is_empty
+   - [X] fs_is_fifo_s
+   - [X] fs_is_fifo
+   - [X] fs_is_other_s
+   - [X] fs_is_other
+   - [X] fs_is_regular_file_s
+   - [X] fs_is_regular_file
+   - [X] fs_is_socket_s
+   - [X] fs_is_socket
+   - [X] fs_is_symlink_s
+   - [X] fs_is_symlink
+   - [X] fs_status_known
+   - [X] fs_path_append
+   - [X] fs_path_append_v
+   - [ ] fs_path_append_s
+     - [X] Windows
+     - [ ] Linux
+   - [X] fs_path_concat
+   - [X] fs_path_concat_s
+   - [X] fs_path_clear
+   - [X] fs_path_make_preferred
+   - [X] fs_path_remove_filename
+   - [X] fs_path_replace_filename
+   - [X] fs_path_replace_extension
+   - [X] fs_path_compare
+   - [X] fs_path_lexically_normal
+   - [X] fs_path_lexically_relative
+   - [X] fs_path_lexically_proximate
+   - [X] fs_path_root_name
+   - [X] fs_path_root_directory
+   - [X] fs_path_root_path
+   - [X] fs_path_relative_path
+   - [X] fs_path_parent_path
+   - [X] fs_path_filename
+   - [X] fs_path_stem
+   - [X] fs_path_extension
+   - [X] fs_path_has_root_path
+   - [X] fs_path_has_root_name
+   - [X] fs_path_has_root_directory
+   - [X] fs_path_has_relative_path
+   - [X] fs_path_has_parent_path
+   - [X] fs_path_has_filename
+   - [X] fs_path_has_stem
+   - [X] fs_path_has_extension
+   - [X] fs_path_is_absolute
+   - [X] fs_path_is_relative
+   - [X] fs_path_begin
+   - [X] fs_path_end
+   - [X] fs_path_iter_next
+   - [X] fs_path_iter_prev
+   - [ ] fs_directory_iterator
+     - [X] Windows
+     - [ ] Linux
+   - [X] fs_dir_iter_next
+   - [X] fs_dir_iter_prev
+   - [X] fs_recursive_directory_iterator
+   - [ ] fs_recursive_directory_iterator_opt
+     - [X] Windows
+     - [ ] Linux
+   - [X] fs_recursive_dir_iter_next
+   - [X] fs_recursive_dir_iter_prev
+
+# Version alpha-1.1.0
+
+ - [ ] Optimize functions avoiding multiple equal parsing calls
+ - [ ] Tests with GoogleTest
+ - [ ] GitHub actions for Windows, Linux and macOS
+ - [ ] Extra utilities
+   - [ ] Directory iterators to string
+ - [ ] Verify alloctions
+ - [ ] Make api return error and return old output by parameter pointer
+ - [ ] Check parameters

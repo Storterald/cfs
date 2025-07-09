@@ -43,6 +43,24 @@
       }
     },
     {
+      "name": "msvc",
+      "hidden": true,
+      "inherits": "common",
+      "generator": "Visual Studio 17 2022",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "cl",
+        "CMAKE_CXX_COMPILER": "cl"
+      },
+      "vendor": {
+        "jetbrains.com/clion": {
+          "toolchain": "Visual Studio"
+        },
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "intelliSenseMode": "windows-msvc-x64"
+        }
+      }
+    },
+    {
       "name": "clang-sanitize",
       "hidden": true,
       "inherits": "common",
@@ -94,6 +112,32 @@
       }
     },
     {
+      "name": "msvc-test",
+      "displayName": "MSVC Test",
+      "inherits": "msvc",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "msvc-test-release",
+      "displayName": "MSVC Test Release",
+      "inherits": "msvc",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "msvc-release",
+      "displayName": "MSVC Release",
+      "inherits": "msvc",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
       "name": "clang-debug-sanitize",
       "displayName": "Clang Sanitize",
       "inherits": "clang-sanitize",
@@ -121,6 +165,24 @@
       "displayName": "GCC Release",
       "configuration": "Release",
       "configurePreset": "gcc-release"
+    },
+    {
+      "name": "msvc-test-build",
+      "displayName": "MSVC Test",
+      "configuration": "Debug",
+      "configurePreset": "msvc-test"
+    },
+    {
+      "name": "msvc-test-release-build",
+      "displayName": "MSVC Test Release",
+      "configuration": "Release",
+      "configurePreset": "msvc-test"
+    },
+    {
+      "name": "msvc-release-build",
+      "displayName": "MSVC Release",
+      "configuration": "Release",
+      "configurePreset": "msvc-release"
     },
     {
       "name": "clang-sanitize-build",

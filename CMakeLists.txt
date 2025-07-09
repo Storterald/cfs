@@ -5,11 +5,27 @@ cmake_policy(SET CMP0079 NEW)
 
 add_library(cfs STATIC "cfs.c")
 
-target_compile_options(cfs
-        PRIVATE "-Wall"
-        PRIVATE "-Wextra"
-        PRIVATE "-Werror"
-        PRIVATE "-Wno-unused-parameter")
+if (MSVC)
+        target_compile_options(cfs
+                PRIVATE "/Wall"
+                PRIVATE "/WX"
+                PRIVATE "/wd4820"  # Silence implicit padding
+                PRIVATE "/wd5045"  # Silence spectre mitigation
+                PRIVATE "/wd5287"
+                PRIVATE "/wd5286"
+
+                # Silenced due to WinAPI:
+                PRIVATE "/wd4668")
+        target_compile_definitions(cfs
+                PRIVATE _CRT_SECURE_NO_WARNINGS)
+else ()
+        target_compile_options(cfs
+                PRIVATE "-Wall"
+                PRIVATE "-Wextra"
+                PRIVATE "-Wpedantic"
+                PRIVATE "-Werror"
+                PRIVATE "-Wno-unused-parameter")
+endif ()
 
 if (BUILD_TESTS)
         add_subdirectory("tests")
