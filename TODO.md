@@ -16,15 +16,9 @@
    - [ ] fs_copy_file_opt
      - [X] Windows
      - [ ] Linux
-   - [ ] fs_copy_symlink
-     - [X] Windows
-     - [ ] Linux
-   - [ ] fs_create_directory
-     - [X] Windows
-     - [ ] Linux
-   - [ ] ds_create_directory_cp
-     - [X] Windows
-     - [ ] Linux
+   - [X] fs_copy_symlink
+   - [X] fs_create_directory
+   - [X] ds_create_directory_cp
    - [ ] fs_create_directories
      - [X] Windows
      - [ ] Linux
@@ -65,9 +59,7 @@
    - [ ] fs_read_symlink
      - [X] Windows
      - [ ] Linux
-   - [ ] fs_remove
-     - [X] Windows
-     - [ ] Linux
+   - [X] fs_remove
    - [X] fs_remove_all
    - [ ] fs_rename
      - [X] Windows

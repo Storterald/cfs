@@ -25,16 +25,16 @@ do {                                            \
 
 #define FS_CFS_ERROR(pec, e)                            \
 do {                                                    \
-        pec->type = fs_error_type_filesystem;           \
-        pec->code = e;                                  \
-        pec->msg = _fs_error_string(pec->type, e);      \
+        (pec)->type = fs_error_type_filesystem;         \
+        (pec)->code = e;                                \
+        (pec)->msg = _fs_error_string(pec->type, e);    \
 } while (FS_FALSE)
 
 #define FS_SYSTEM_ERROR(pec, e)                         \
 do {                                                    \
-        pec->type = fs_error_type_system;               \
-        pec->code = e;                                  \
-        pec->msg = _fs_error_string(pec->type, e);      \
+        (pec)->type = fs_error_type_system;             \
+        (pec)->code = e;                                \
+        (pec)->msg = _fs_error_string(pec->type, e);    \
 } while (FS_FALSE)
 
 #ifndef NDEBUG
@@ -154,7 +154,7 @@ typedef struct _fs_mount_point_reparse_buffer   _fs_mount_point_reparse_buffer;
 typedef struct _fs_generic_reparse_buffer       _fs_generic_reparse_buffer;
 #endif // CreateSymbolicLink
 #else // _WIN32
-
+#define FS_SYMLINKS_SUPPORTED
 #endif // _WIN32
 
 #ifdef _MSC_VER
@@ -254,6 +254,7 @@ static uint32_t _recursive_count(fs_cpath p, fs_bool follow_symlinks, fs_error_c
 static uint32_t _recursive_entries(fs_cpath p, fs_bool follow_symlinks, fs_cpath *buf, fs_error_code *ec);
 #else // _WIN32
 #define _relative_path_contains_root_name(...) FS_FALSE
+static fs_bool _create_dir(fs_cpath p, fs_perms perms, fs_error_code *ec);
 #endif // _WIN32
 
 //          Helper functions --------
@@ -361,8 +362,6 @@ fs_bool _is_symlink(fs_cpath p)
 #ifdef FS_SYMLINKS_SUPPORTED
         if (GetFileAttributesW(p) & FILE_ATTRIBUTE_REPARSE_POINT)
                 return FS_TRUE;
-#else // FS_SYMLINKS_SUPPORTED
-        return FS_FALSE;
 #endif // FS_SYMLINKS_SUPPORTED
 #else // _WIN32
 #error "not implemented"
@@ -975,6 +974,16 @@ uint32_t _recursive_entries(fs_cpath p, fs_bool follow_symlinks, fs_cpath *buf, 
         return idx;
 }
 
+#else // _WIN32
+fs_bool _create_dir(fs_cpath p, fs_perms perms, fs_error_code *ec) {
+        if (mkdir(p, perms)) {
+                FS_SYSTEM_ERROR(ec, errno);
+        } else {
+                return FS_TRUE;
+        }
+
+        return FS_FALSE;
+}
 #endif // _WIN32
 
 // -------- Public functions
@@ -1483,12 +1492,22 @@ void fs_copy_symlink(fs_cpath from, fs_cpath to, fs_error_code *ec)
         }
 #endif // !NDEBUG
 
-        fs_path actualPath = fs_read_symlink(from, ec);
-        if (ec->code)
+        // TODO: optimize, fs_read_symlink already call status
+
+        const fs_cpath p = fs_read_symlink(from, ec);
+        if (ec->code != fs_err_success)
                 return;
 
-        fs_create_symlink(actualPath, to, ec);
-        free(actualPath);
+        if (fs_is_directory(p, ec) || ec->code != fs_err_success) {
+                if (ec->code == fs_err_success)
+                        fs_create_directory_symlink(from, to, ec);
+                goto deref;
+        }
+
+        fs_create_symlink(p, to, ec);
+
+deref:
+        free((fs_path)p);
 #else // FS_SYMLINKS_SUPPORTED
         FS_CFS_ERROR(ec, _fs_err_function_not_supported);
 #endif // FS_SYMLINKS_SUPPORTED
@@ -1510,11 +1529,10 @@ fs_bool fs_create_directory(fs_cpath p, fs_error_code *ec)
                 FS_SYSTEM_ERROR(ec, GetLastError());
                 return FS_FALSE;
         }
-#else // _WIN32
-#error "not implemented"
-#endif // _WIN32
-
         return FS_TRUE;
+#else // _WIN32
+        return _create_dir(p, fs_perms_all);
+#endif // _WIN32
 }
 
 fs_bool fs_create_directory_cp(fs_cpath p, fs_cpath existing_p, fs_error_code *ec)
@@ -1533,11 +1551,13 @@ fs_bool fs_create_directory_cp(fs_cpath p, fs_cpath existing_p, fs_error_code *e
                 FS_SYSTEM_ERROR(ec, GetLastError());
                 return FS_FALSE;
         }
-#else // _WIN32
-#error "not implemented"
-#endif // _WIN32
-
         return FS_TRUE;
+#else // _WIN32
+        const fs_file_status status = fs_status(existing_p, ec);
+        if (ec->code != fs_err_success)
+                return FS_FALSE;
+        return _create_dir(p, status.perms);
+#endif // _WIN32
 }
 
 fs_bool fs_create_directories(fs_cpath p, fs_error_code *ec)
@@ -1956,6 +1976,7 @@ fs_path fs_read_symlink(fs_cpath p, fs_error_code *ec)
 {
         FS_CLEAR_ERROR_CODE(ec);
 
+#ifdef FS_SYMLINKS_SUPPORTED
 #ifndef NDEBUG
         if (!p) {
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
@@ -1963,7 +1984,6 @@ fs_path fs_read_symlink(fs_cpath p, fs_error_code *ec)
         }
 #endif // !NDEBUG
 
-#ifdef FS_SYMLINKS_SUPPORTED
         if (!fs_is_symlink(p, ec) || ec->code) {
                 if (!ec->code)
                         FS_CFS_ERROR(ec, fs_err_invalid_argument);
@@ -1994,16 +2014,22 @@ fs_bool fs_remove(fs_cpath p, fs_error_code *ec)
 #endif // !NDEBUG
 
 #ifdef _WIN32
-        fs_file_status status = fs_symlink_status(p, ec);
+        const fs_file_status status = fs_symlink_status(p, ec);
         if (fs_exists_s(status)) {
                 if ((status.type == fs_file_type_directory && RemoveDirectoryW(p))
                     || DeleteFileW(p)) {
                         return FS_TRUE;
                 }
+                FS_SYSTEM_ERROR(ec, GetLastError());
         } else if (fs_status_known(status))
                 FS_CLEAR_ERROR_CODE(ec);
 #else // _WIN32
-#error "not implemented"
+        if (remove(p) == 0)
+                return FS_TRUE;
+
+        const int err = errno;
+        if (err != ENOENT)
+                FS_SYSTEM_ERROR(ec, err);
 #endif // _WIN32
 
         return FS_FALSE;
@@ -2025,13 +2051,14 @@ uintmax_t fs_remove_all(fs_cpath p, fs_error_code *ec)
         if (ec->code)
                 return (uintmax_t)-1;
 
-        for (; FS_DEREF_DIR_ITER(it); fs_recursive_dir_iter_next(&it)) {
-                fs_remove(FS_DEREF_DIR_ITER(it), ec);
+        FOR_EACH_ENTRY_IN_RDIR(path, it) {
+                fs_remove(FS_DEREF_RDIR_ITER(it), ec);
                 if (ec->code)
                         break;
 
                 ++count;
         }
+        FS_DESTROY_RDIR_ITER(it);
 
         return count;
 }
@@ -3150,7 +3177,7 @@ fs_recursive_dir_iter fs_recursive_directory_iterator_opt(fs_cpath p, fs_directo
 
         elems[count] = NULL;
         return (fs_dir_iter){
-                .pos = 0,
+                .pos   = 0,
                 .elems = elems
         };
 #else // _WIN32

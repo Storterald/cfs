@@ -24,6 +24,19 @@ typedef uint8_t fs_bool;
 #define FS_PREFERRED_SEPARATOR_S "/"
 #endif // _WIN32
 
+#define FS_DEREF_PATH_ITER(it) ((it).elem)
+#define FS_DEREF_DIR_ITER(it) ((it).elems[(it).pos])
+#define FS_DEREF_RDIR_ITER FS_DEREF_DIR_ITER
+
+#define FOR_EACH_PATH_ITER(__it__)                                      \
+        for (; *FS_DEREF_PATH_ITER(__it__); fs_path_iter_next(&(__it__)))
+
+#define FOR_EACH_ENTRY_IN_DIR(__name__, __it__)                                         \
+        for (fs_cpath __name__ = FS_DEREF_DIR_ITER(__it__); __name__;                   \
+                fs_dir_iter_next(&(__it__)), __name__ = FS_DEREF_DIR_ITER(__it__))
+
+#define FOR_EACH_ENTRY_IN_RDIR FOR_EACH_ENTRY_IN_DIR
+
 #define FS_DESTROY_PATH_ITER(it)        \
 do {                                    \
         it.pos = NULL;                  \
@@ -32,15 +45,16 @@ do {                                    \
         it.begin = NULL;                \
 } while (FS_FALSE)
 
-#define FS_DESTROY_DIR_ITER(it) \
-do {                            \
-        it.pos = 0;             \
-        free(it.elems);         \
-        it.elems = NULL;        \
+#define FS_DESTROY_DIR_ITER(it)                 \
+do {                                            \
+        it.pos   = 0;                           \
+        FOR_EACH_ENTRY_IN_DIR(__path, it)       \
+                free((void *)__path);           \
+        free((void *)it.elems);                 \
+        it.elems = NULL;                        \
 } while (FS_FALSE)
 
-#define FS_DEREF_PATH_ITER(it) ((it).elem)
-#define FS_DEREF_DIR_ITER(it) ((it).elems[(it).pos])
+#define FS_DESTROY_RDIR_ITER FS_DESTROY_DIR_ITER
 
 #define FS_RESET_ERROR(pec)                     \
 do {                                            \
@@ -49,13 +63,6 @@ do {                                            \
         free((pec)->msg);                       \
         (pec)->msg = NULL;                      \
 } while (FS_FALSE)
-
-#define FOR_EACH_PATH_ITER(__it__)                                      \
-        for (; *FS_DEREF_PATH_ITER(__it__); fs_path_iter_next(&(__it__)))
-
-#define FOR_EACH_ENTRY_IN_DIR(__name__, __it__)                                         \
-        for (fs_cpath __name__ = FS_DEREF_DIR_ITER(__it__); __name__;                   \
-                fs_dir_iter_next(&(__it__)), __name__ = FS_DEREF_DIR_ITER(__it__))
 
 typedef uintmax_t fs_file_time_type;
 typedef FS_CHAR *fs_path;
