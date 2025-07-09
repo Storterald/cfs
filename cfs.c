@@ -1599,7 +1599,8 @@ void fs_create_hard_link(fs_cpath target, fs_cpath link, fs_error_code *ec)
         if (!CreateHardLinkW(link, target, NULL))
                 FS_SYSTEM_ERROR(ec, GetLastError());
 #else // _WIN32
-#error "not implemented"
+        if (link(target, link))
+                FS_SYSTEM_ERROR(ec, errno);
 #endif // _WIN32
 }
 
@@ -1620,7 +1621,8 @@ void fs_create_symlink(fs_cpath target, fs_cpath link, fs_error_code *ec)
         if (!CreateSymbolicLinkW(link, target, attr == FILE_ATTRIBUTE_DIRECTORY))
                 FS_SYSTEM_ERROR(ec, GetLastError());
 #else // _WIN32
-#error "not implemented"
+        if (symlink(target, link))
+                FS_SYSTEM_ERROR(ec, errno);
 #endif // _WIN32
 #else // FS_SYMLINKS_SUPPORTED
         FS_CFS_ERROR(ec, _fs_err_function_not_supported);
@@ -1629,24 +1631,7 @@ void fs_create_symlink(fs_cpath target, fs_cpath link, fs_error_code *ec)
 
 void fs_create_directory_symlink(fs_cpath target, fs_cpath link, fs_error_code *ec)
 {
-        FS_CLEAR_ERROR_CODE(ec);
-
-#ifdef FS_SYMLINKS_SUPPORTED
-#ifndef NDEBUG
-        if (!target || !link) {
-                FS_CFS_ERROR(ec, fs_err_invalid_argument);
-                return;
-        }
-#endif // !NDEBUG
-
-#ifdef _WIN32
         fs_create_symlink(target, link, ec);
-#else // _WIN32
-#error "not implemented"
-#endif // _WIN32
-#else // FS_SYMLINKS_SUPPORTED
-        FS_CFS_ERROR(ec, _fs_err_function_not_supported);
-#endif // FS_SYMLINKS_SUPPORTED
 }
 
 fs_path fs_current_path(fs_error_code *ec)

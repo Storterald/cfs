@@ -22,15 +22,9 @@
    - [ ] fs_create_directories
      - [X] Windows
      - [ ] Linux
-   - [ ] fs_create_hard_link
-     - [X] Windows
-     - [ ] Linux
-   - [ ] fs_create_symlink
-     - [X] Windows
-     - [ ] Linux
-   - [ ] fs_create_directory_symlink
-     - [X] Windows
-     - [ ] Linux
+   - [X] fs_create_hard_link
+   - [X] fs_create_symlink
+   - [X] fs_create_directory_symlink
    - [ ] fs_current_path
      - [X] Windows
      - [ ] Linux
