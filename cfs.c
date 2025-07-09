@@ -105,6 +105,7 @@ typedef struct __stat64 _fs_stat;
         || (__err__) == ERROR_FILE_NOT_FOUND    \
         || (__err__) == ERROR_INVALID_NAME)
 #else // _WIN32
+#include <sys/statvfs.h>
 #include <unistd.h>
 #include <stdlib.h>
 
@@ -366,8 +367,6 @@ fs_bool _is_symlink(fs_cpath p)
         if (FS_FLAG_SET(GetFileAttributesW(p), FILE_ATTRIBUTE_REPARSE_POINT))
                 return FS_TRUE;
 #endif // FS_SYMLINKS_SUPPORTED
-#else // _WIN32
-#error "not implemented"
 #endif // _WIN32
         return FS_FALSE;
 }
@@ -1809,6 +1808,12 @@ uintmax_t fs_file_size(fs_cpath p, fs_error_code *ec)
         }
 #endif // !NDEBUG
 
+        if (!fs_is_regular_file(p, ec) || ec->code != fs_err_success) {
+                if (ec->code == fs_err_success)
+                        FS_CFS_ERROR(ec, fs_err_is_a_directory);
+                return (uintmax_t)-1;
+        }
+
 #ifdef _WIN32
         const HANDLE hFile = _fs_get_handle(
                 p, _fs_access_rights_File_read_attributes,
@@ -1863,7 +1868,13 @@ uintmax_t fs_hard_link_count(fs_cpath p, fs_error_code *ec)
 
         return fInfo.nNumberOfLinks - 1;
 #else // _WIN32
-#error "not implemented"
+        struct stat st;
+        if (stat(p, &st) != 0) {
+                FS_SYSTEM_ERROR(ec, errno);
+                return (uintmax_t)-1;
+        }
+
+        return st.st_nlink;
 #endif // _WIN32
 }
 
@@ -1899,7 +1910,13 @@ fs_file_time_type fs_last_write_time(fs_cpath p, fs_error_code *ec)
         CloseHandle(hFile);
         return time;
 #else // _WIN32
-#error "not implemented"
+        struct stat st;
+        if (stat(p, &st) != 0) {
+                FS_SYSTEM_ERROR(ec, errno);
+                return (uintmax_t)-1;
+        }
+
+        return (fs_file_time_type)st.st_mtime;
 #endif // _WIN32
 }
 
@@ -2098,7 +2115,8 @@ void fs_rename(fs_cpath old_p, fs_cpath new_p, fs_error_code *ec)
         if (!MoveFileW(old_p, new_p))
                 FS_SYSTEM_ERROR(ec, GetLastError());
 #else // _WIN32
-#error "not implemented"
+        if (rename(old_p, new_p))
+                FS_SYSTEM_ERROR(ec, errno);
 #endif // _WIN32
 }
 
@@ -2176,8 +2194,8 @@ fs_space_info fs_space(fs_cpath p, fs_error_code *ec)
         FS_CLEAR_ERROR_CODE(ec);
 
         fs_space_info spaceInfo = {
-                .capacity = UINTMAX_MAX,
-                .free = UINTMAX_MAX,
+                .capacity  = UINTMAX_MAX,
+                .free      = UINTMAX_MAX,
                 .available = UINTMAX_MAX
         };
 
@@ -2195,7 +2213,7 @@ fs_space_info fs_space(fs_cpath p, fs_error_code *ec)
                 PULARGE_INTEGER available;
         } info;
 
-        fs_path rootPath = fs_absolute(p, ec);
+        const fs_path rootPath = fs_absolute(p, ec);
         if (ec->code)
                 return spaceInfo;
 
@@ -2213,12 +2231,27 @@ fs_space_info fs_space(fs_cpath p, fs_error_code *ec)
                 return spaceInfo;
         }
 
-        spaceInfo.capacity = (uintmax_t)info.capacity;
-        spaceInfo.free = (uintmax_t)info.free;
+        spaceInfo.capacity  = (uintmax_t)info.capacity;
+        spaceInfo.free      = (uintmax_t)info.free;
         spaceInfo.available = (uintmax_t)info.available;
         free(rootPath);
 #else // _WIN32
-#error "not implemented"
+        struct statvfs fs;
+        if (statvfs(p, &fs)) {
+                FS_SYSTEM_ERROR(ec, errno);
+                return spaceInfo;
+        }
+
+        if (fs.f_frsize != (unsigned long)-1) {
+                const uintmax_t fragment_size = fs.f_frsize;
+                const fsblkcnt_t unknown      = -1;
+                if (fs.f_blocks != unknown)
+                        spaceInfo.capacity  = fs.f_blocks * fragment_size;
+                if (fs.f_bfree != unknown)
+                        spaceInfo.free      = fs.f_bfree * fragment_size;
+                if (fs.f_bavail != unknown)
+                        spaceInfo.available = fs.f_bavail * fragment_size;
+        }
 #endif // _WIN32
 
         return spaceInfo;
@@ -2239,6 +2272,8 @@ fs_file_status fs_status(fs_cpath p, fs_error_code *ec)
         fs_file_status status = {0};
 
 #ifdef _WIN32
+        // From GNU libstdc++:
+        // stat() fails if there's a trailing slash (PR 88881)
         if (fs_path_has_relative_path(p) && _is_separator(p[wcslen(p) - 1]))
                 res = fs_path_parent_path(p);
 #endif // _WIN32

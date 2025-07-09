@@ -33,12 +33,8 @@
    - [X] fs_exists
    - [X] fs_equivalent
    - [X] fs_file_size
-   - [ ] fs_hard_link_count
-     - [X] Windows
-     - [ ] Linux
-   - [ ] fs_last_write_time
-     - [X] Windows
-     - [ ] Linux
+   - [X] fs_hard_link_count
+   - [X] fs_last_write_time
    - [ ] fs_last_write_time_wr
      - [X] Windows
      - [ ] Linux
@@ -51,18 +47,12 @@
      - [ ] Linux
    - [X] fs_remove
    - [X] fs_remove_all
-   - [ ] fs_rename
-     - [X] Windows
-     - [ ] Linux
+   - [X] fs_rename
    - [ ] fs_resize_file
      - [X] Windows
      - [ ] Linux
-   - [ ] fs_space
-     - [X] Windows
-     - [ ] Linux
-   - [ ] fs_status
-     - [X] Windows
-     - [ ] Linux
+   - [X] fs_space
+   - [X] fs_status
    - [ ] fs_symlink_status
      - [X] Windows
      - [ ] Linux
