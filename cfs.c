@@ -76,6 +76,8 @@ fs_bool fs_is_##what(fs_cpath p, fs_error_code *ec)     \
 typedef FS_CHAR *_fs_char_it;
 typedef const FS_CHAR *_fs_char_cit;
 
+#define FS_FLAG_SET(flags, flag) (((flags) & (flag)) != 0)
+
 #ifdef _MSC_VER
 #define FS_SDUP _strdup
 #define FS_WDUP _wcsdup
@@ -211,6 +213,7 @@ static char *_fs_error_string(fs_error_type type, uint32_t e);
 FS_FORCE_INLINE static fs_path _dupe_string(fs_cpath first, fs_cpath last);
 static fs_file_type _get_file_type(fs_cpath p, const _fs_stat *st);
 static fs_bool _is_symlink(fs_cpath p);
+FS_FORCE_INLINE static fs_file_status _make_status(fs_cpath p, _fs_stat *st);
 
 FS_FORCE_INLINE static fs_bool _is_separator(FS_CHAR c);
 static void _path_append_s(fs_path *pp, fs_cpath other, fs_bool realloc);
@@ -360,13 +363,20 @@ fs_bool _is_symlink(fs_cpath p)
 {
 #ifdef _WIN32
 #ifdef FS_SYMLINKS_SUPPORTED
-        if (GetFileAttributesW(p) & FILE_ATTRIBUTE_REPARSE_POINT)
+        if (FS_FLAG_SET(GetFileAttributesW(p), FILE_ATTRIBUTE_REPARSE_POINT))
                 return FS_TRUE;
 #endif // FS_SYMLINKS_SUPPORTED
 #else // _WIN32
 #error "not implemented"
 #endif // _WIN32
         return FS_FALSE;
+}
+
+fs_file_status _make_status(fs_cpath p, _fs_stat *st) {
+        return (fs_file_status){
+                .type  = _get_file_type(p, st),
+                .perms = st->st_mode & fs_perms_mask
+        };
 }
 
 fs_bool _is_separator(FS_CHAR c)
@@ -798,7 +808,7 @@ void _change_file_permissions(fs_cpath p, fs_bool follow_symlinks, fs_bool reado
         const DWORD rdtest = readonly ? FILE_ATTRIBUTE_READONLY : 0;
 
 #ifdef FS_SYMLINKS_SUPPORTED
-        if ((oldattrs & FILE_ATTRIBUTE_REPARSE_POINT) != 0u && follow_symlinks) {
+        if (FS_FLAG_SET(oldattrs, FILE_ATTRIBUTE_REPARSE_POINT) && follow_symlinks) {
                 const _fs_access_rights flags = _fs_access_rights_File_read_attributes
                         | _fs_access_rights_File_write_attributes;
                 const HANDLE hFile = _fs_get_handle(
@@ -869,8 +879,8 @@ uint32_t _recursive_count(fs_cpath p, fs_bool follow_symlinks, fs_error_code *ec
                 if (wcscmp(findFileData.cFileName, L".") == 0 || wcscmp(findFileData.cFileName, L"..") == 0)
                         continue;
 
-                const fs_bool issym = (findFileData.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
-                const fs_bool isdir = (findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+                const fs_bool issym = FS_FLAG_SET(findFileData.dwFileAttributes, FILE_ATTRIBUTE_REPARSE_POINT);
+                const fs_bool isdir = FS_FLAG_SET(findFileData.dwFileAttributes, FILE_ATTRIBUTE_DIRECTORY);
 
                 const fs_bool append = isdir || issym;
                 const fs_bool recurse = isdir && (!issym || follow_symlinks);
@@ -937,8 +947,8 @@ uint32_t _recursive_entries(fs_cpath p, fs_bool follow_symlinks, fs_cpath *buf, 
                 if (wcscmp(findFileData.cFileName, L".") == 0 || wcscmp(findFileData.cFileName, L"..") == 0)
                         continue;
 
-                const fs_bool issym = (findFileData.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
-                const fs_bool isdir = (findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+                const fs_bool issym = FS_FLAG_SET(findFileData.dwFileAttributes, FILE_ATTRIBUTE_REPARSE_POINT);
+                const fs_bool isdir = FS_FLAG_SET(findFileData.dwFileAttributes, FILE_ATTRIBUTE_DIRECTORY);
 
                 const fs_bool recurse = isdir && (!issym || follow_symlinks);
                 const fs_bool read = issym && isdir && follow_symlinks;
@@ -1237,17 +1247,16 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
         }
 #endif // !NDEBUG
 
-        const fs_bool flink = (options & (fs_copy_options_skip_symlinks | fs_copy_options_copy_symlinks))
-                != fs_copy_options_none;
+        const fs_bool flink = FS_FLAG_SET(options, fs_copy_options_skip_symlinks | fs_copy_options_copy_symlinks);
         const fs_file_type ftype = flink ? fs_status(from, ec).type : fs_symlink_status(from, ec).type;
         if (ec->code)
                 return;
 
         // fs_copy_opt without the option fs_copy_options_directories_only or
         // fs_copy_options_recursive cannot copy sub-directories.
-        if (options & fs_copy_options_in_recursive_copy && _is_directory_t(ftype)
-            && !(options & fs_copy_options_recursive
-                || options & fs_copy_options_directories_only)) {
+        if (FS_FLAG_SET(options, fs_copy_options_in_recursive_copy) && _is_directory_t(ftype)
+            && !(FS_FLAG_SET(options, fs_copy_options_recursive)
+                || FS_FLAG_SET(options, fs_copy_options_directories_only))) {
                 return;
         }
 
@@ -1256,8 +1265,7 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
                 return;
         }
 
-        const fs_bool tlink = (options & (fs_copy_options_skip_symlinks | fs_copy_options_create_symlinks))
-                != fs_copy_options_none;
+        const fs_bool tlink = FS_FLAG_SET(options, fs_copy_options_skip_symlinks | fs_copy_options_create_symlinks);
         const fs_file_type ttype = tlink ? fs_status(to, ec).type : fs_symlink_status(to, ec).type;
         if (ec->code)
                 return;
@@ -1270,16 +1278,16 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
                         return;
                 }
 
-                if (options & fs_copy_options_skip_existing)
+                if (FS_FLAG_SET(options, fs_copy_options_skip_existing))
                         return;
 
-                if (options & fs_copy_options_overwrite_existing) {
+                if (FS_FLAG_SET(options, fs_copy_options_overwrite_existing)) {
                         fs_remove_all(to, ec);
                         if (ec->code)
                                 return;
                 }
 
-                if (options & fs_copy_options_update_existing) {
+                if (FS_FLAG_SET(options, fs_copy_options_update_existing)) {
                         const fs_file_time_type ftime = fs_last_write_time(from, ec);
                         if (ec->code)
                                 return;
@@ -1311,10 +1319,10 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
 
 #ifdef FS_SYMLINKS_SUPPORTED
         if (_is_symlink_t(ftype)) {
-                if (options & fs_copy_options_skip_symlinks)
+                if (FS_FLAG_SET(options, fs_copy_options_skip_symlinks))
                         return;
 
-                if (options & fs_copy_options_copy_symlinks) {
+                if (FS_FLAG_SET(options, fs_copy_options_copy_symlinks)) {
                         fs_copy_symlink(from, to, ec);
                         return;
                 }
@@ -1325,15 +1333,15 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
 #endif // FS_SYMLINKS_SUPPORTED
 
         if (_is_regular_file_t(ftype)) {
-                if (options & fs_copy_options_directories_only)
+                if (FS_FLAG_SET(options, fs_copy_options_directories_only))
                         return;
 
-                if (options & fs_copy_options_create_symlinks) {
+                if (FS_FLAG_SET(options, fs_copy_options_create_symlinks)) {
                         fs_create_symlink(from, to, ec);
                         return;
                 }
 
-                if (options & fs_copy_options_create_hard_links) {
+                if (FS_FLAG_SET(options, fs_copy_options_create_hard_links)) {
                         fs_create_hard_link(from, to, ec);
                         return;
                 }
@@ -1354,7 +1362,7 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
         }
 
         if (_is_directory_t(ftype)) {
-                if (options & fs_copy_options_create_symlinks) {
+                if (FS_FLAG_SET(options, fs_copy_options_create_symlinks)) {
                         FS_CFS_ERROR(ec, fs_err_is_a_directory);
                         return;
                 }
@@ -1362,8 +1370,8 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
                 if (!_exists_t(ttype))
                         fs_create_directory_cp(to, from, ec);
 
-                if (options & fs_copy_options_recursive
-                    || !(options & fs_copy_options_directories_only)) {
+                if (FS_FLAG_SET(options, fs_copy_options_recursive)
+                    || !FS_FLAG_SET(options, fs_copy_options_directories_only)) {
                         fs_dir_iter it = fs_directory_iterator(from, ec);
                         if (ec->code)
                                 return;
@@ -1444,13 +1452,13 @@ void fs_copy_file_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_er
                         goto clean;
                 }
 
-                if (options & fs_copy_options_skip_existing)
+                if (FS_FLAG_SET(options, fs_copy_options_skip_existing))
                         goto clean;
 
-                if (options & fs_copy_options_overwrite_existing)
+                if (FS_FLAG_SET(options, fs_copy_options_overwrite_existing))
                         goto copy_file;
 
-                if (!(options & fs_copy_options_update_existing)) {
+                if (!FS_FLAG_SET(options, fs_copy_options_update_existing)) {
                         FS_CFS_ERROR(ec, fs_err_file_exists);
                         goto clean;
                 }
@@ -1679,7 +1687,8 @@ void fs_current_path_ch(fs_cpath p, fs_error_code *ec)
         if (!SetCurrentDirectoryW(p))
                 FS_SYSTEM_ERROR(ec, GetLastError());
 #else // _WIN32
-#error "not implemented"
+        if (chdir(p))
+                FS_SYSTEM_ERROR(ec, errno);
 #endif // _WIN32
 }
 
@@ -1757,9 +1766,35 @@ deref:
                 CloseHandle(handle2);
 
         return out;
-
 #else // _WIN32
-#error "not implemented"
+        fs_file_status s1;
+        struct stat st1;
+        if (stat(p1, &st1) == 0)
+                s1 = _make_status(p1, &st1);
+        else if (errno == ENOENT || errno == ENOTDIR)
+                s1.type = fs_file_type_not_found;
+        else {
+                FS_SYSTEM_ERROR(ec, errno);
+                return FS_FALSE;
+        }
+
+        fs_file_status s2;
+        struct stat st2;
+        if (stat(p2, &st2) == 0)
+                s2 = _make_status(p2, &st2);
+        else if (errno == ENOENT || errno == ENOTDIR)
+                s2.type = fs_file_type_not_found;
+        else {
+                FS_SYSTEM_ERROR(ec, errno);
+                return FS_FALSE;
+        }
+
+        if (!_exists_t(s1.type) || !_exists_t(s2.type)) {
+                FS_CFS_ERROR(ec, fs_err_no_such_file_or_directory);
+                return FS_FALSE;
+        }
+
+        return s1.type == s2.type && st1.st_dev == st2.st_dev && st1.st_ino == st2.st_ino;
 #endif // _WIN32
 }
 
@@ -1886,8 +1921,8 @@ void fs_last_write_time_wr(fs_cpath p, fs_file_time_type new_time, fs_error_code
         if (ec->code)
                 return;
 
-        FILETIME lastWriteTime = {
-                .dwLowDateTime = new_time & 0xFFFFFFFF,
+        const FILETIME lastWriteTime = {
+                .dwLowDateTime  = new_time & 0xFFFFFFFF,
                 .dwHighDateTime = new_time >> 32
         };
 
@@ -2220,8 +2255,7 @@ fs_file_status fs_status(fs_cpath p, fs_error_code *ec)
                 else
                         FS_SYSTEM_ERROR(ec, err);
         } else {
-                status.type = _get_file_type(p, &st);
-                status.perms = st.st_mode & fs_perms_mask;
+                status = _make_status(p, &st);
         }
 
         return status;
@@ -2254,8 +2288,7 @@ fs_file_status fs_symlink_status(fs_cpath p, fs_error_code *ec)
                 else
                         FS_SYSTEM_ERROR(ec, err);
         } else {
-                status.type = _get_file_type(p, &st);
-                status.perms = st.st_mode & fs_perms_mask;
+                status = _make_status(p, &st);
         }
 
         return status;
@@ -3145,7 +3178,7 @@ fs_recursive_dir_iter fs_recursive_directory_iterator_opt(fs_cpath p, fs_directo
 
 #ifdef _WIN32
         // Need this to be 1 or 0.
-        fs_bool follow_symlinks = (options & fs_directory_options_follow_directory_symlink) != fs_directory_options_none;
+        const fs_bool follow_symlinks = FS_FLAG_SET(options, fs_directory_options_follow_directory_symlink);
 
         uint32_t count = _recursive_count(p, follow_symlinks, ec);
         if (!count) // both for errors and empty dirs

@@ -28,14 +28,10 @@
    - [ ] fs_current_path
      - [X] Windows
      - [ ] Linux
-   - [ ] fs_current_path_ch
-     - [X] Windows
-     - [ ] Linux
+   - [X] fs_current_path_ch
    - [X] fs_exists_s
    - [X] fs_exists
-   - [ ] fs_equivalent
-     - [X] Windows
-     - [ ] Linux
+   - [X] fs_equivalent
    - [X] fs_file_size
    - [ ] fs_hard_link_count
      - [X] Windows
