@@ -155,8 +155,8 @@ typedef enum fs_directory_options {
 } fs_directory_options;
 
 typedef enum fs_error_type {
-        fs_error_type_unknown,
-        fs_error_type_filesystem,
+        fs_error_type_none,
+        fs_error_type_cfs,
         fs_error_type_system
 
 } fs_error_type;
@@ -189,7 +189,7 @@ typedef struct fs_file_status {
 
 typedef struct fs_error_code {
         fs_error_type type;
-        fs_err        code;
+        int32_t       code;
         char          *msg;
 
 } fs_error_code;

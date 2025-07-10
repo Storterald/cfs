@@ -13,7 +13,7 @@ do {                                            \
 
 #define FS_CFS_ERROR(pec, e)                            \
 do {                                                    \
-        (pec)->type = fs_error_type_filesystem;         \
+        (pec)->type = fs_error_type_cfs;                \
         (pec)->code = e;                                \
         (pec)->msg = _fs_error_string(pec->type, e);    \
 } while (FS_FALSE)
@@ -72,8 +72,8 @@ fs_bool fs_is_##what(fs_cpath p, fs_error_code *ec)     \
 #define FS_STR(__foo__, ...) wcs##__foo__(__VA_ARGS__)
 #define FS_DUP FS_WDUP
 
-#define IS_ENOENT(__err__) (                    \
-           (__err__) == ERROR_PATH_NOT_FOUND    \
+#define IS_ENOENT(__err__)                      \
+        ((__err__) == ERROR_PATH_NOT_FOUND      \
         || (__err__) == ERROR_FILE_NOT_FOUND    \
         || (__err__) == ERROR_INVALID_NAME)
 
@@ -242,7 +242,7 @@ static int _compare_time(const fs_file_time_type *t1, const fs_file_time_type *t
 FS_FORCE_INLINE static fs_bool _is_separator(FS_CHAR c);
 static void _path_append_s(fs_path *pp, fs_cpath other, fs_bool realloc);
 
-static fs_file_status _make_status(const _fs_stat *st);
+static fs_file_status _make_status(const _fs_stat *st, fs_error_code *ec);
 static fs_file_status _status(fs_cpath p, _fs_stat *outst, fs_error_code *ec);
 static fs_file_status _symlink_status(fs_cpath p, _fs_stat *outst, fs_error_code *ec);
 
@@ -309,9 +309,9 @@ fs_bool _linux_sendfile(int in, int out, size_t len, fs_error_code *ec);
 char *_fs_error_string(fs_error_type type, int e)
 {
         switch (type) {
-        case fs_error_type_unknown:
+        case fs_error_type_none:
                 break;
-        case fs_error_type_filesystem:
+        case fs_error_type_cfs:
                 switch((fs_err)e) {
                 case fs_err_success:
                         return FS_SDUP("cfs error: success");
@@ -463,9 +463,22 @@ replace:
 #endif // !_WIN32
 }
 
-fs_file_status _make_status(const _fs_stat *st)
+fs_file_status _make_status(const _fs_stat *st, fs_error_code *ec)
 {
 #ifdef _WIN32
+        if (ec->type != fs_error_type_none) {
+                if (ec->type == fs_error_type_system && ec->code != ERROR_SUCCESS) {
+                        FS_CLEAR_ERROR_CODE(ec);
+                        return (fs_file_status){
+                                .type  = IS_ENOENT(ec->code) ?
+                                        fs_file_type_not_found :
+                                        fs_file_type_none,
+                                .perms = fs_perms_unknown
+                        };
+                }
+                return (fs_file_status){0};
+        }
+
         fs_file_status status     = (fs_file_status){0};
         const _fs_file_attr attrs = st->attributes;
         const _fs_reparse_tag tag = st->reparse_point_tag;
@@ -496,6 +509,7 @@ fs_file_status _make_status(const _fs_stat *st)
 defer:
         return status;
 #else // _WIN32
+        (void)ec;
         return (fs_file_status){
                 .type  = _posix_get_file_type(st),
                 .perms = st->st_mode & fs_perms_mask
@@ -512,9 +526,7 @@ fs_file_status _status(fs_cpath p, _fs_stat *outst, fs_error_code *ec)
 #ifdef _WIN32
         const _fs_stats_flag flags = _fs_stats_flag_Attributes | _fs_stats_flag_Follow_symlinks;
         *outst                     = _win32_get_file_stat(p, flags, ec);
-        if (ec->code != fs_err_success)
-                return (fs_file_status){0};
-        return _make_status(outst);
+        return _make_status(outst, ec);
 #else // _WIN32
         if (stat(p, outst)) {
                 const int err = errno;
@@ -532,7 +544,7 @@ fs_file_status _status(fs_cpath p, _fs_stat *outst, fs_error_code *ec)
 #endif // EOVERFLOW
                 FS_SYSTEM_ERROR(ec, err);
         } else {
-                return _make_status(outst);
+                return _make_status(outst, ec);
         }
 
         return (fs_file_status){0};
@@ -549,9 +561,7 @@ fs_file_status _symlink_status(fs_cpath p, _fs_stat *outst, fs_error_code *ec)
         (void)outst;  // Only used on posix
         const _fs_stats_flag flags = _fs_stats_flag_Attributes | _fs_stats_flag_Reparse_tag;
         *outst                     = _win32_get_file_stat(p, flags, ec);
-        if (ec->code != fs_err_success)
-                return (fs_file_status){0};
-        return _make_status(outst);
+        return _make_status(outst, ec);
 #else // _WIN32
         if (lstat(p, outst)) {
                 const int err = errno;
@@ -563,7 +573,7 @@ fs_file_status _symlink_status(fs_cpath p, _fs_stat *outst, fs_error_code *ec)
 
                 FS_SYSTEM_ERROR(ec, err);
         } else {
-                return _make_status(outst);
+                return _make_status(outst, ec);
         }
 
         return (fs_file_status){0};
@@ -1657,7 +1667,6 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
                 return;
         }
 #endif // !NDEBUG
-
         const fs_bool flink      = FS_FLAG_SET(options, fs_copy_options_skip_symlinks | fs_copy_options_copy_symlinks);
         const fs_file_type ftype = flink ?
                 fs_status(from, ec).type :
@@ -1782,8 +1791,11 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
                         return;
                 }
 
-                if (!_exists_t(ttype))
+                if (!_exists_t(ttype)) {
                         fs_create_directory_cp(to, from, ec);
+                        if (ec->code != fs_err_success)
+                                return;
+                }
 
                 if (FS_FLAG_SET(options, fs_copy_options_recursive)
                     || !FS_FLAG_SET(options, fs_copy_options_directories_only)) {
@@ -1850,7 +1862,7 @@ void fs_copy_file_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_er
         }
 #endif // FS_SYMLINKS_SUPPORTED
 
-        if (_is_regular_file_t(ftype)) {
+        if (!_is_regular_file_t(ftype)) {
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
                 goto clean;
         }
@@ -2129,7 +2141,7 @@ fs_bool fs_exists(fs_cpath p, fs_error_code *ec)
         }
 #endif // !NDEBUG
 
-        fs_file_status s = fs_symlink_status(p, ec);
+        const fs_file_status s = fs_symlink_status(p, ec);
         return fs_exists_s(s) && ec->code == fs_err_success;
 }
 
