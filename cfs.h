@@ -79,12 +79,13 @@ typedef enum fs_file_type {
         fs_file_type_symlink,
 
         fs_file_type_block, // not used on Windows
-        fs_file_type_character,
+        fs_file_type_character, // TODO: currently not on windows, but implementable
 
         fs_file_type_fifo, // not used on Windows (\\.\pipe named pipes don't behave exactly like POSIX fifos)
         fs_file_type_socket, // not used on Windows
-        fs_file_type_unknown
+        fs_file_type_unknown,
 
+        fs_file_type_junction // implementation-defined value indicating an NT junction
 } fs_file_type;
 
 typedef enum fs_perms {
@@ -112,9 +113,8 @@ typedef enum fs_perms {
         fs_perms_mask       = 07777,
         fs_perms_unknown    = 0xFFFF,
 
-        _fs_perms_All_write = fs_perms_owner_write | fs_perms_group_write | fs_perms_other_write,
-        _fs_perms_File_attribute_readonly =
-        fs_perms_all & ~_fs_perms_All_write // returned for files with FILE_ATTRIBUTE_READONLY
+        _fs_perms_All_write               = fs_perms_owner_write | fs_perms_group_write | fs_perms_other_write,
+        _fs_perms_File_attribute_readonly = fs_perms_all & ~_fs_perms_All_write // returned for files with FILE_ATTRIBUTE_READONLY
 
 } fs_perms;
 

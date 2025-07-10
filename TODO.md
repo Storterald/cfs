@@ -37,9 +37,7 @@
    - [X] fs_resize_file
    - [X] fs_space
    - [X] fs_status
-   - [ ] fs_symlink_status
-     - [ ] Windows
-     - [X] Linux
+   - [X] fs_symlink_status
    - [ ] fs_temp_directory_path
      - [X] Windows
      - [ ] Linux
@@ -121,3 +119,4 @@
  - [ ] Verify alloctions
  - [ ] Make api return error and return old output by parameter pointer
  - [ ] Check parameters
+ - [ ] Verify minimum OS version off all API calls used (Windows, Linux, macOS, FreeBSD)

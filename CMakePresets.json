@@ -51,6 +51,11 @@
         "CMAKE_C_COMPILER": "cl",
         "CMAKE_CXX_COMPILER": "cl"
       },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
       "vendor": {
         "jetbrains.com/clion": {
           "toolchain": "Visual Studio"
