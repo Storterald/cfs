@@ -80,7 +80,6 @@ typedef const FS_CHAR *_fs_char_cit;
 #include <windows.h>
 #include <shlobj.h> // SHCreateDirectoryExW
 
-#define FILETIME_EPOCH_TO_UNIX_EPOCH (-116444736000000000ULL)
 #define UNIX_EPOCH_TO_FILETIME_EPOCH (116444736000000000ULL)
 
 #define FS_PREF(s) L##s
@@ -1749,7 +1748,7 @@ fs_bool fs_equivalent(fs_cpath p1, fs_cpath p2, fs_error_code *ec)
 
         handle1 = _fs_get_handle(
                 p1, _fs_access_rights_File_read_attributes,
-                _fs_access_rights_File_write_attributes, ec);
+                _fs_file_flags_Backup_semantics, ec);
         if (ec->code != fs_err_success) {
                 return FS_FALSE;
         }
@@ -1763,7 +1762,7 @@ fs_bool fs_equivalent(fs_cpath p1, fs_cpath p2, fs_error_code *ec)
 
         handle2 = _fs_get_handle(
                 p2, _fs_access_rights_File_read_attributes,
-                _fs_access_rights_File_write_attributes, ec);
+                _fs_file_flags_Backup_semantics, ec);
         if (ec->code != fs_err_success) {
                 out = FS_FALSE;
                 goto deref;
@@ -1929,7 +1928,7 @@ fs_file_time_type fs_last_write_time(fs_cpath p, fs_error_code *ec)
         // Universal Time (UTC). The system records file times when applications
         // create, access, and write to files.
         const ULONGLONG time = ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
-        const ULONGLONG unix = time + FILETIME_EPOCH_TO_UNIX_EPOCH;
+        const ULONGLONG unix = time - UNIX_EPOCH_TO_FILETIME_EPOCH;
 
         return (fs_file_time_type){
                 .seconds     = (time_t)(unix / 10000000ULL),
@@ -2408,7 +2407,7 @@ fs_path fs_temp_directory_path(fs_error_code *ec)
 #ifdef _WIN32
         if (!GetTempPathW(MAX_PATH, tmp)) {
                 FS_SYSTEM_ERROR(ec, GetLastError());
-                return FS_DUP("");
+                return FS_DUP(FS_PREF(""));
         }
 #else // _WIN32
 #error "not implemented"
