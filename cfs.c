@@ -76,19 +76,12 @@ fs_bool fs_is_##what(fs_cpath p, fs_error_code *ec)     \
 typedef FS_CHAR *_fs_char_it;
 typedef const FS_CHAR *_fs_char_cit;
 
-#define FS_FLAG_SET(flags, flag) (((flags) & (flag)) != 0)
-
-#ifdef _MSC_VER
-#define FS_SDUP _strdup
-#define FS_WDUP _wcsdup
-#else // _MSC_VER
-#define FS_SDUP strdup
-#define FS_WDUP wcsdup
-#endif // _MSC_VER
-
 #ifdef _WIN32
 #include <windows.h>
 #include <shlobj.h> // SHCreateDirectoryExW
+
+#define FILETIME_EPOCH_TO_UNIX_EPOCH (-116444736000000000ULL)
+#define UNIX_EPOCH_TO_FILETIME_EPOCH (116444736000000000ULL)
 
 #define FS_PREF(s) L##s
 #define FS_MAX_PATH MAX_PATH // used outside OS specific blocks
@@ -106,8 +99,11 @@ typedef struct __stat64 _fs_stat;
         || (__err__) == ERROR_INVALID_NAME)
 #else // _WIN32
 #include <sys/statvfs.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <fcntl.h>
+#include <utime.h>
 
 #define FS_STR_PREF(s) s
 #define FS_MAX_PATH PATH_MAX // used outside OS specific blocks
@@ -120,7 +116,7 @@ typedef struct __stat64 _fs_stat;
 typedef struct stat _fs_stat;
 
 #define IS_ENOENT(__err__) (__err__ == ENOENT)
-#endif // _WIN32
+#endif // !_WIN32
 
 #ifdef _WIN32
 #ifdef CreateSymbolicLink
@@ -158,13 +154,19 @@ typedef struct _fs_generic_reparse_buffer       _fs_generic_reparse_buffer;
 #endif // CreateSymbolicLink
 #else // _WIN32
 #define FS_SYMLINKS_SUPPORTED
-#endif // _WIN32
+#endif // !_WIN32
 
 #ifdef _MSC_VER
 #define FS_FORCE_INLINE __forceinline
+#define FS_SDUP _strdup
+#define FS_WDUP _wcsdup
 #else // _MSC_VER
 #define FS_FORCE_INLINE __attribute__((always_inline)) inline
-#endif // _MSC_VER
+#define FS_SDUP strdup
+#define FS_WDUP wcsdup
+#endif // !_MSC_VER
+
+#define FS_FLAG_SET(flags, flag) (((flags) & (flag)) != 0)
 
 typedef enum _fs_stats_flag {
         _fs_stats_flag_None = 0,
@@ -215,6 +217,7 @@ FS_FORCE_INLINE static fs_path _dupe_string(fs_cpath first, fs_cpath last);
 static fs_file_type _get_file_type(fs_cpath p, const _fs_stat *st);
 static fs_bool _is_symlink(fs_cpath p);
 FS_FORCE_INLINE static fs_file_status _make_status(fs_cpath p, _fs_stat *st);
+static int _compare_time(const fs_file_time_type *t1, const fs_file_time_type *t2);
 
 FS_FORCE_INLINE static fs_bool _is_separator(FS_CHAR c);
 static void _path_append_s(fs_path *pp, fs_cpath other, fs_bool realloc);
@@ -259,7 +262,7 @@ static uint32_t _recursive_entries(fs_cpath p, fs_bool follow_symlinks, fs_cpath
 #else // _WIN32
 #define _relative_path_contains_root_name(...) FS_FALSE
 static fs_bool _create_dir(fs_cpath p, fs_perms perms, fs_error_code *ec);
-#endif // _WIN32
+#endif // !_WIN32
 
 //          Helper functions --------
 
@@ -306,7 +309,7 @@ char *_fs_error_string(fs_error_type type, uint32_t e)
                 return msg;
 #else // _WIN32
 #error "not implemented"
-#endif // _WIN32
+#endif // !_WIN32
         }
 
         char *const buf = malloc(64);
@@ -350,7 +353,7 @@ fs_file_type _get_file_type(fs_cpath p, const _fs_stat *st)
 #else // S_ISLNK
         if (_is_symlink(p))
                 return fs_file_type_symlink;
-#endif // S_ISLNK
+#endif // !S_ISLNK
 #ifdef S_ISSOCK
         if (S_ISSOCK(st->st_mode))
                 return fs_file_type_socket;
@@ -371,11 +374,28 @@ fs_bool _is_symlink(fs_cpath p)
         return FS_FALSE;
 }
 
-fs_file_status _make_status(fs_cpath p, _fs_stat *st) {
+fs_file_status _make_status(fs_cpath p, _fs_stat *st)
+{
         return (fs_file_status){
                 .type  = _get_file_type(p, st),
                 .perms = st->st_mode & fs_perms_mask
         };
+}
+
+int _compare_time(const fs_file_time_type *t1, const fs_file_time_type *t2)
+{
+        if (t1->seconds == t2->seconds) {
+                if (t1->nanoseconds == t2->nanoseconds)
+                        return 0;
+
+                if (t1->nanoseconds > t2->nanoseconds)
+                        return 1;
+                return -1;
+        }
+
+        if (t1->seconds > t2->seconds)
+                return 1;
+        return -1;
 }
 
 fs_bool _is_separator(FS_CHAR c)
@@ -384,7 +404,7 @@ fs_bool _is_separator(FS_CHAR c)
         return c == '\\' || c == '/';
 #else // _WIN32
         return c == '/';
-#endif // _WIN32
+#endif // !_WIN32
 }
 
 void _path_append_s(fs_path *pp, fs_cpath other, fs_bool realloc)
@@ -444,7 +464,7 @@ replace:
 
 #else // _WIN32
 #error "not implemented"
-#endif // _WIN32
+#endif // !_WIN32
 }
 
 fs_bool _exists_t(fs_file_type t)
@@ -588,7 +608,7 @@ _fs_char_cit _find_extension(fs_cpath p, _fs_char_cit *extend)
         end = end ? end : p + len;
 #else // _WIN32
         const _fs_char_cit end = p + len;
-#endif // _WIN32
+#endif // !_WIN32
 
         if (extend)
                 *extend = end;
@@ -621,7 +641,7 @@ fs_bool _is_absolute(fs_cpath p, _fs_char_cit rtnend, _fs_char_cit *rtdir)
         const fs_bool has_root_name = _has_root_name(p, rtnend);
 #else // _WIN32
         const fs_bool has_root_name = FS_TRUE;
-#endif // _WIN32
+#endif // !_WIN32
 
         if (rtdir)
                 *rtdir = rtdend;
@@ -762,7 +782,7 @@ fs_path _get_final_path(fs_cpath p, _fs_path_kind *pkind, fs_error_code *ec)
                 DWORD req = GetFinalPathNameByHandleW(hFile, buf, MAX_PATH, kind);
 #else // FS_SYMLINKS_SUPPORTED
                 DWORD req = GetFullPathNameW(p, len, buf, NULL);
-#endif // FS_SYMLINKS_SUPPORTED
+#endif // !FS_SYMLINKS_SUPPORTED
 
                 if (len == 0) {
                         const DWORD err = GetLastError();
@@ -993,7 +1013,7 @@ fs_bool _create_dir(fs_cpath p, fs_perms perms, fs_error_code *ec) {
 
         return FS_FALSE;
 }
-#endif // _WIN32
+#endif // !_WIN32
 
 // -------- Public functions
 
@@ -1048,7 +1068,7 @@ fs_path fs_absolute(fs_cpath p, fs_error_code *ec)
         return buf;
 #else // _WIN32
 #error "not implemented"
-#endif // _WIN32
+#endif // !_WIN32
 }
 
 fs_path fs_canonical(fs_cpath p, fs_error_code *ec)
@@ -1100,7 +1120,7 @@ fs_path fs_canonical(fs_cpath p, fs_error_code *ec)
         return out;
 #else  // _WIN32
 #error "not implemented"
-#endif // _WIN32
+#endif // !_WIN32
 }
 
 fs_path fs_weakly_canonical(fs_cpath p, fs_error_code *ec)
@@ -1295,7 +1315,7 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
                         if (ec->code)
                                 return;
 
-                        if (ftime <= ttime)
+                        if (_compare_time(&ftime, &ttime) <= 0)
                                 return;
 
                         fs_remove_all(to, ec);
@@ -1470,8 +1490,8 @@ void fs_copy_file_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_er
                 if (ec->code)
                         goto clean;
 
-                if (ftime > ttime)
-                        goto copy_file;
+                if (_compare_time(&ftime, &ttime) <= 0)
+                        goto clean;
         }
 
 copy_file:
@@ -1480,7 +1500,7 @@ copy_file:
                 FS_SYSTEM_ERROR(ec, GetLastError());
 #else // _WIN32
 #error "not implemented"
-#endif // _WIN32
+#endif // !_WIN32
 
 clean:
         if (freeFrom)
@@ -1517,7 +1537,7 @@ deref:
         free((fs_path)p);
 #else // FS_SYMLINKS_SUPPORTED
         FS_CFS_ERROR(ec, _fs_err_function_not_supported);
-#endif // FS_SYMLINKS_SUPPORTED
+#endif // !FS_SYMLINKS_SUPPORTED
 }
 
 fs_bool fs_create_directory(fs_cpath p, fs_error_code *ec)
@@ -1539,7 +1559,7 @@ fs_bool fs_create_directory(fs_cpath p, fs_error_code *ec)
         return FS_TRUE;
 #else // _WIN32
         return _create_dir(p, fs_perms_all);
-#endif // _WIN32
+#endif // !_WIN32
 }
 
 fs_bool fs_create_directory_cp(fs_cpath p, fs_cpath existing_p, fs_error_code *ec)
@@ -1564,7 +1584,7 @@ fs_bool fs_create_directory_cp(fs_cpath p, fs_cpath existing_p, fs_error_code *e
         if (ec->code != fs_err_success)
                 return FS_FALSE;
         return _create_dir(p, status.perms);
-#endif // _WIN32
+#endif // !_WIN32
 }
 
 fs_bool fs_create_directories(fs_cpath p, fs_error_code *ec)
@@ -1586,7 +1606,7 @@ fs_bool fs_create_directories(fs_cpath p, fs_error_code *ec)
         }
 #else // _WIN32
 #error "not implemented"
-#endif // _WIN32
+#endif // !_WIN32
 
         return FS_TRUE;
 }
@@ -1608,7 +1628,7 @@ void fs_create_hard_link(fs_cpath target, fs_cpath link, fs_error_code *ec)
 #else // _WIN32
         if (link(target, link))
                 FS_SYSTEM_ERROR(ec, errno);
-#endif // _WIN32
+#endif // !_WIN32
 }
 
 void fs_create_symlink(fs_cpath target, fs_cpath link, fs_error_code *ec)
@@ -1630,10 +1650,10 @@ void fs_create_symlink(fs_cpath target, fs_cpath link, fs_error_code *ec)
 #else // _WIN32
         if (symlink(target, link))
                 FS_SYSTEM_ERROR(ec, errno);
-#endif // _WIN32
+#endif // !_WIN32
 #else // FS_SYMLINKS_SUPPORTED
         FS_CFS_ERROR(ec, _fs_err_function_not_supported);
-#endif // FS_SYMLINKS_SUPPORTED
+#endif // !FS_SYMLINKS_SUPPORTED
 }
 
 void fs_create_directory_symlink(fs_cpath target, fs_cpath link, fs_error_code *ec)
@@ -1668,7 +1688,7 @@ fs_path fs_current_path(fs_error_code *ec)
         return buf;
 #else // _WIN32
 #error "not implemented"
-#endif // _WIN32
+#endif // !_WIN32
 }
 
 void fs_current_path_ch(fs_cpath p, fs_error_code *ec)
@@ -1688,7 +1708,7 @@ void fs_current_path_ch(fs_cpath p, fs_error_code *ec)
 #else // _WIN32
         if (chdir(p))
                 FS_SYSTEM_ERROR(ec, errno);
-#endif // _WIN32
+#endif // !_WIN32
 }
 
 fs_bool fs_exists_s(fs_file_status s)
@@ -1794,7 +1814,7 @@ deref:
         }
 
         return s1.type == s2.type && st1.st_dev == st2.st_dev && st1.st_ino == st2.st_ino;
-#endif // _WIN32
+#endif // !_WIN32
 }
 
 uintmax_t fs_file_size(fs_cpath p, fs_error_code *ec)
@@ -1838,7 +1858,7 @@ uintmax_t fs_file_size(fs_cpath p, fs_error_code *ec)
                 return (uintmax_t)-1;
         }
         return status.st_size;
-#endif // _WIN32
+#endif // !_WIN32
 }
 
 uintmax_t fs_hard_link_count(fs_cpath p, fs_error_code *ec)
@@ -1875,7 +1895,7 @@ uintmax_t fs_hard_link_count(fs_cpath p, fs_error_code *ec)
         }
 
         return st.st_nlink;
-#endif // _WIN32
+#endif // !_WIN32
 }
 
 fs_file_time_type fs_last_write_time(fs_cpath p, fs_error_code *ec)
@@ -1885,7 +1905,7 @@ fs_file_time_type fs_last_write_time(fs_cpath p, fs_error_code *ec)
 #ifndef NDEBUG
         if (!p) {
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
-                return (fs_file_time_type)-1;
+                return (fs_file_time_type){0};
         }
 #endif // !NDEBUG
 
@@ -1894,35 +1914,61 @@ fs_file_time_type fs_last_write_time(fs_cpath p, fs_error_code *ec)
                 p, _fs_access_rights_File_read_attributes,
                 _fs_file_flags_Normal, ec);
         if (ec->code)
-                return (fs_file_time_type)-1;
+                return (fs_file_time_type){0};
 
-        FILETIME lastWriteTime;
-        if (!GetFileTime(hFile, NULL, NULL, &lastWriteTime)) {
+        FILETIME ft;
+        if (!GetFileTime(hFile, NULL, NULL, &ft)) {
                 FS_SYSTEM_ERROR(ec, GetLastError());
                 CloseHandle(hFile);
-                return (uint64_t)-1;
+                return (fs_file_time_type){0};
         }
-
-        const fs_file_time_type time =
-                ((fs_file_time_type)(lastWriteTime.dwHighDateTime & 0xFFFFFFFF) << 32)
-                | (lastWriteTime.dwLowDateTime & 0xFFFFFFFF);
-
         CloseHandle(hFile);
-        return time;
+
+        // A file time is a 64-bit value that represents the number of 100-nanosecond
+        // intervals that have elapsed since 12:00 A.M. January 1, 1601 Coordinated
+        // Universal Time (UTC). The system records file times when applications
+        // create, access, and write to files.
+        const ULONGLONG time = ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+        const ULONGLONG unix = time + FILETIME_EPOCH_TO_UNIX_EPOCH;
+
+        return (fs_file_time_type){
+                .seconds     = (time_t)(unix / 10000000ULL),
+                .nanoseconds = (time_t)((unix % 10000000ULL) * 100)
+        };
+
 #else // _WIN32
         struct stat st;
         if (stat(p, &st) != 0) {
                 FS_SYSTEM_ERROR(ec, errno);
-                return (uintmax_t)-1;
+                return (fs_file_time_type){0};
         }
 
-        return (fs_file_time_type)st.st_mtime;
-#endif // _WIN32
+#if defined(__APPLE__)
+        return (fs_file_time_type){
+                .seconds     = (time_t)st.st_mtimespec.tv_sec,
+                .nanoseconds = (uint32_t)st.st_mtimespec.tv_nsec
+        };
+#elif defined(__linux__)
+#if defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE >= 200809L
+        return (fs_file_time_type){
+                .seconds     = (time_t)st.st_mtim.tv_sec,
+                .nanoseconds = (uint32_t)st.st_mtim.tv_nsec
+        };
+#else // _POSIX_C_SOURCE && _POSIX_C_SOURCE >= 200809L
+        return (fs_file_time_type){
+                .seconds     = st.st_mtime,
+                .nanoseconds = 0
+        };
+#endif // !_POSIX_C_SOURCE || _POSIX_C_SOURCE < 200809L
+#endif // !__APPLE__
+#endif // !_WIN32
 }
 
 void fs_last_write_time_wr(fs_cpath p, fs_file_time_type new_time, fs_error_code *ec)
 {
         FS_CLEAR_ERROR_CODE(ec);
+
+        new_time.nanoseconds %= 1000000000;
 
 #ifndef NDEBUG
         if (!p) {
@@ -1938,21 +1984,46 @@ void fs_last_write_time_wr(fs_cpath p, fs_file_time_type new_time, fs_error_code
         if (ec->code)
                 return;
 
+        const ULONGLONG time = (ULONGLONG)new_time.seconds * 10000000ULL
+                + (ULONGLONG)new_time.nanoseconds / 100ULL
+                + UNIX_EPOCH_TO_FILETIME_EPOCH;
+
         const FILETIME lastWriteTime = {
-                .dwLowDateTime  = new_time & 0xFFFFFFFF,
-                .dwHighDateTime = new_time >> 32
+                .dwLowDateTime  = (DWORD)(time & 0xFFFFFFFF),
+                .dwHighDateTime = (DWORD)(time >> 32)
         };
 
-        if (!SetFileTime(hFile, NULL, NULL, &lastWriteTime)) {
+        if (!SetFileTime(hFile, NULL, NULL, &lastWriteTime))
                 FS_SYSTEM_ERROR(ec, GetLastError());
-                goto defer;
-        }
 
-defer:
         CloseHandle(hFile);
 #else // _WIN32
-#error "not implemented"
-#endif // _WIN32
+#if defined(__linux__) && defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE >= 200809L
+        struct timespec ts[2];
+        ts[0].tv_sec  = 0;
+        ts[0].tv_nsec = UTIME_OMIT;
+        ts[1].tv_sec  = new_time.seconds;
+        ts[1].tv_nsec = (long)new_time.nanoseconds;
+
+        if (utimensat(AT_FDCWD, p, ts, 0))
+                FS_SYSTEM_ERROR(ec, errno);
+#else // __linux__ && _POSIX_C_SOURCE && _POSIX_C_SOURCE >= 200809L
+        struct stat st;
+        if (stat(p, &st)) {
+                FS_SYSTEM_ERROR(ec, errno);
+                return;
+        }
+
+        struct timeval tv[2];
+        tv[0].tv_sec  = (long)st.st_atime;
+        tv[0].tv_usec = 0L;
+        tv[1].tv_sec  = (long)new_time.seconds;
+        tv[1].tv_usec = (long)new_time.nanoseconds / 1000L;
+
+        if (utimes(p, tv))
+                FS_SYSTEM_ERROR(ec, errno);
+#endif // !__linux__ || !_POSIX_C_SOURCE || _POSIX_C_SOURCE < 200809L
+#endif // !_WIN32
 }
 
 void fs_permissions(fs_cpath p, fs_perms prms, fs_error_code *ec)
@@ -2006,7 +2077,7 @@ void fs_permissions_opt(fs_cpath p, fs_perms prms, fs_perm_options opts, fs_erro
         _change_file_permissions(p, follow, readonly, ec);
 #else // _WIN32
 #error "not implemented"
-#endif // _WIN32
+#endif // !_WIN32
 }
 
 fs_path fs_read_symlink(fs_cpath p, fs_error_code *ec)
@@ -2032,11 +2103,11 @@ fs_path fs_read_symlink(fs_cpath p, fs_error_code *ec)
         return _read_symlink(p, ec);
 #else // _WIN32
 #error "not implemented"
-#endif // _WIN32
+#endif // !_WIN32
 #else // FS_SYMLINKS_SUPPORTED
         FS_CFS_ERROR(ec, _fs_err_function_not_supported);
         return NULL;
-#endif // FS_SYMLINKS_SUPPORTED
+#endif // !FS_SYMLINKS_SUPPORTED
 }
 
 fs_bool fs_remove(fs_cpath p, fs_error_code *ec)
@@ -2067,7 +2138,7 @@ fs_bool fs_remove(fs_cpath p, fs_error_code *ec)
         const int err = errno;
         if (err != ENOENT)
                 FS_SYSTEM_ERROR(ec, err);
-#endif // _WIN32
+#endif // !_WIN32
 
         return FS_FALSE;
 }
@@ -2117,7 +2188,7 @@ void fs_rename(fs_cpath old_p, fs_cpath new_p, fs_error_code *ec)
 #else // _WIN32
         if (rename(old_p, new_p))
                 FS_SYSTEM_ERROR(ec, errno);
-#endif // _WIN32
+#endif // !_WIN32
 }
 
 void fs_resize_file(fs_cpath p, uintmax_t size, fs_error_code *ec)
@@ -2186,7 +2257,7 @@ defer:
         CloseHandle(hFile);
 #else // _WIN32
 #error "not implemented"
-#endif // _WIN32
+#endif // !_WIN32
 }
 
 fs_space_info fs_space(fs_cpath p, fs_error_code *ec)
@@ -2252,7 +2323,7 @@ fs_space_info fs_space(fs_cpath p, fs_error_code *ec)
                 if (fs.f_bavail != unknown)
                         spaceInfo.available = fs.f_bavail * fragment_size;
         }
-#endif // _WIN32
+#endif // !_WIN32
 
         return spaceInfo;
 }
@@ -2341,7 +2412,7 @@ fs_path fs_temp_directory_path(fs_error_code *ec)
         }
 #else // _WIN32
 #error "not implemented"
-#endif // _WIN32
+#endif // !_WIN32
 
         return FS_DUP(tmp);
 }
@@ -2551,7 +2622,7 @@ void fs_path_replace_filename(fs_path *pp, fs_cpath replacement, fs_error_code *
         fs_path_remove_filename(pp);
         FS_STR(cpy, out, p);
 
-        const size_t len = FS_STR(len, p) + 1 /* '\0' */; // path without filename
+        const size_t len = FS_STR(len, p) + 1 /* '\0' */;  // path without filename
         FS_STR(cpy, out + len, replacement);
 
         *pp = FS_DUP(out);
@@ -2576,7 +2647,7 @@ void fs_path_replace_extension(fs_path *pp, fs_cpath replacement, fs_error_code 
         free(ext);
 
         const size_t rpll = FS_STR(len, replacement);
-        if (!rpll) // If the replacement is an empty string, work is done.
+        if (!rpll)  // If the replacement is an empty string, work is done.
                 return;
 
         // The replacement may not contain a dot.
@@ -3162,7 +3233,7 @@ fs_dir_iter fs_directory_iterator(fs_cpath p, fs_error_code *ec)
 
         // Restore p in search path
         const size_t len = wcslen(p);
-        searchPath[len] = '\0';
+        searchPath[len]  = '\0';
 
         wchar_t *base = searchPath;
         do {
@@ -3177,12 +3248,12 @@ fs_dir_iter fs_directory_iterator(fs_cpath p, fs_error_code *ec)
 
         elems[count] = NULL;
         return (fs_dir_iter){
-                .pos = 0,
+                .pos   = 0,
                 .elems = elems
         };
 #else // _WIN32
 #error "not implemented"
-#endif // _WIN32
+#endif // !_WIN32
 }
 
 void fs_dir_iter_next(fs_dir_iter *it)
@@ -3213,16 +3284,16 @@ fs_recursive_dir_iter fs_recursive_directory_iterator_opt(fs_cpath p, fs_directo
 
 #ifdef _WIN32
         // Need this to be 1 or 0.
-        const fs_bool follow_symlinks = FS_FLAG_SET(options, fs_directory_options_follow_directory_symlink);
+        const fs_bool follow = FS_FLAG_SET(options, fs_directory_options_follow_directory_symlink);
 
-        uint32_t count = _recursive_count(p, follow_symlinks, ec);
+        uint32_t count = _recursive_count(p, follow, ec);
         if (!count) // both for errors and empty dirs
                 return (fs_dir_iter){0};
 
         // allocate one extra space for the NULL (end) iterator
         fs_cpath *elems = malloc((count + 1) * sizeof(fs_cpath));
 
-        count = _recursive_entries(p, follow_symlinks, elems, ec);
+        count = _recursive_entries(p, follow, elems, ec);
         if (ec->code) {
                 free(elems);
                 return (fs_dir_iter){0};
@@ -3235,18 +3306,7 @@ fs_recursive_dir_iter fs_recursive_directory_iterator_opt(fs_cpath p, fs_directo
         };
 #else // _WIN32
 #error "not implemented"
-#endif // _WIN32
+#endif // !_WIN32
 }
 
 //          fs_path_iters --------
-
-#undef FS_IS_X_FOO_DECL
-#undef FS_HAS_X_FOO_DECL
-
-#undef FS_STACK_PATH_DECLARATION
-#undef FS_CLEAR_ERROR_CODE
-#undef FS_CFS_ERROR
-#undef FS_SYSTEM_ERROR
-
-#undef FS_MAX_PATH
-#undef FS_STR

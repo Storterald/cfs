@@ -22,7 +22,7 @@ typedef uint8_t fs_bool;
 #define FS_CHAR char
 #define FS_PREFERRED_SEPARATOR '/'
 #define FS_PREFERRED_SEPARATOR_S "/"
-#endif // _WIN32
+#endif // !_WIN32
 
 #define FS_DEREF_PATH_ITER(it) ((it).elem)
 #define FS_DEREF_DIR_ITER(it) ((it).elems[(it).pos])
@@ -64,7 +64,10 @@ do {                                            \
         (pec)->msg = NULL;                      \
 } while (FS_FALSE)
 
-typedef uintmax_t fs_file_time_type;
+typedef struct fs_file_time_type {
+        time_t   seconds;
+        uint32_t nanoseconds;
+} fs_file_time_type;
 typedef FS_CHAR *fs_path;
 typedef const FS_CHAR *fs_cpath;
 

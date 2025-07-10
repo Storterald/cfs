@@ -35,9 +35,7 @@
    - [X] fs_file_size
    - [X] fs_hard_link_count
    - [X] fs_last_write_time
-   - [ ] fs_last_write_time_wr
-     - [X] Windows
-     - [ ] Linux
+   - [X] fs_last_write_time_wr
    - [X] fs_permissions
    - [ ] fs_permissions_opt
      - [X] Windows
