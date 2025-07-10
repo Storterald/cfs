@@ -184,19 +184,19 @@ typedef struct fs_space_info {
 
 typedef struct fs_file_status {
         fs_file_type type;
-        fs_perms perms;
+        fs_perms     perms;
 } fs_file_status;
 
 typedef struct fs_error_code {
         fs_error_type type;
-        fs_err code;
-        char *msg;
+        fs_err        code;
+        char          *msg;
 
 } fs_error_code;
 
 typedef struct fs_path_iter {
         fs_cpath pos;
-        fs_path elem;
+        fs_path  elem;
         fs_cpath begin;
 
 } fs_path_iter;

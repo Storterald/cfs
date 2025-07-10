@@ -19,9 +19,7 @@
    - [X] fs_create_hard_link
    - [X] fs_create_symlink
    - [X] fs_create_directory_symlink
-   - [ ] fs_current_path
-     - [X] Windows
-     - [ ] Linux
+   - [X] fs_current_path
    - [X] fs_current_path_ch
    - [X] fs_exists_s
    - [X] fs_exists
@@ -40,8 +38,8 @@
    - [X] fs_space
    - [X] fs_status
    - [ ] fs_symlink_status
-     - [X] Windows
-     - [ ] Linux
+     - [ ] Windows
+     - [X] Linux
    - [ ] fs_temp_directory_path
      - [X] Windows
      - [ ] Linux
