@@ -169,6 +169,7 @@ typedef enum fs_err {
         fs_err_file_exists               = EEXIST,
         fs_err_is_a_directory            = EISDIR,
         fs_err_loop                      = ELOOP,
+        fs_err_name_too_long             = ENAMETOOLONG,
 #ifdef _WIN32
         fs_err_reparse_tag_invalid
 #endif // _WIN32
@@ -242,7 +243,7 @@ void fs_create_directory_symlink(fs_cpath target, fs_cpath link, fs_error_code *
 
 fs_path fs_current_path(fs_error_code *ec);
 
-void fs_current_path_ch(fs_cpath p, fs_error_code *ec);
+void fs_set_current_path(fs_cpath p, fs_error_code *ec);
 
 fs_bool fs_exists_s(fs_file_status s);
 
@@ -256,7 +257,7 @@ uintmax_t fs_hard_link_count(fs_cpath p, fs_error_code *ec);
 
 fs_file_time_type fs_last_write_time(fs_cpath p, fs_error_code *ec);
 
-void fs_last_write_time_wr(fs_cpath p, fs_file_time_type new_time, fs_error_code *ec);
+void fs_set_last_write_time(fs_cpath p, fs_file_time_type new_time, fs_error_code *ec);
 
 void fs_permissions(fs_cpath p, fs_perms prms, fs_error_code *ec);
 

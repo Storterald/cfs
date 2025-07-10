@@ -1,21 +1,15 @@
 # Version alpha-1.0.0
 
  - [ ] std::filesystem API
-   - [ ] fs_absolute
-     - [X] Windows
-     - [ ] Linux
-   - [ ] fs_canonical
-     - [X] Windows
-     - [ ] Linux
+   - [X] fs_absolute
+   - [X] fs_canonical
    - [X] fs_weakly_canonical
    - [X] fs_relative
    - [X] fs_proximate
    - [X] fs_copy
    - [X] fs_copy_opt
    - [X] fs_copy_file
-   - [ ] fs_copy_file_opt
-     - [X] Windows
-     - [ ] Linux
+   - [X] fs_copy_file_opt
    - [X] fs_copy_symlink
    - [X] fs_create_directory
    - [X] ds_create_directory_cp
@@ -35,20 +29,14 @@
    - [X] fs_file_size
    - [X] fs_hard_link_count
    - [X] fs_last_write_time
-   - [X] fs_last_write_time_wr
+   - [X] fs_set_last_write_time
    - [X] fs_permissions
-   - [ ] fs_permissions_opt
-     - [X] Windows
-     - [ ] Linux
-   - [ ] fs_read_symlink
-     - [X] Windows
-     - [ ] Linux
+   - [X] fs_set_permissions
+   - [X] fs_read_symlink
    - [X] fs_remove
    - [X] fs_remove_all
    - [X] fs_rename
-   - [ ] fs_resize_file
-     - [X] Windows
-     - [ ] Linux
+   - [X] fs_resize_file
    - [X] fs_space
    - [X] fs_status
    - [ ] fs_symlink_status
