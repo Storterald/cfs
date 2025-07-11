@@ -610,16 +610,16 @@ int _get_recursive_entries(fs_cpath p, fs_cpath **buf, int *alloc, fs_bool follo
                 if (ec->type == fs_error_type_cfs
                     && ec->code == fs_err_no_such_file_or_directory)
                         FS_CLEAR_ERROR_CODE(ec);
-#ifdef _WIN32
-                free(sp);
-#endif // _WIN32
                 *fe = FS_TRUE;
                 return 0;
         }
 
-        fs_cpath *elems = *buf;
+#ifdef _WIN32
+        free(sp);
+#endif // _WIN32
 
         do {
+                fs_cpath *elems = *buf;  // recursive subcalls may change *buf
                 if (FS_STR(cmp, FS_DIR_ENTRY_NAME(entry), FS_PREF(".")) == 0
                     || FS_STR(cmp, FS_DIR_ENTRY_NAME(entry), FS_PREF("..")) == 0)
                         continue;
@@ -629,21 +629,18 @@ int _get_recursive_entries(fs_cpath p, fs_cpath **buf, int *alloc, fs_bool follo
                 if (idx == *alloc) {
                         *alloc *= 2;
                         *buf    = realloc(elems, (*alloc + 1) * sizeof(fs_cpath));
+                        elems   = *buf;
                 }
 
                 const fs_cpath elem = elems[idx - 1];
                 if (fs_is_directory(elem, ec)) {
-                        idx += _get_recursive_entries(elem, buf, alloc, follow, skipdenied, ec, idx, fe);
+                        idx = _get_recursive_entries(elem, buf, alloc, follow, skipdenied, ec, idx, fe);
                         if (fe && *fe)
-                                goto defer;
+                                break;
                 }
         } while (_find_next(dir, &entry, skipdenied, ec));
-defer:
         FS_CLOSE_DIR(dir);
 
-#ifdef _WIN32
-        free(sp);
-#endif // _WIN32
         if (ec->code != fs_err_success) {
                 *fe = FS_TRUE;
                 return 0;
