@@ -597,7 +597,7 @@ int _get_recursive_entries(fs_cpath p, fs_cpath **buf, int *alloc, fs_bool follo
                 fe = &forceexit;
 
 #ifdef _WIN32
-        const fs_path sp = malloc(wcslen(p) + 3);
+        const fs_path sp = malloc((wcslen(p) + 3) * sizeof(wchar_t));
         wcscpy(sp, p);
         wcscat(sp, L"\\*");
 #else // _WIN32
@@ -1487,9 +1487,9 @@ fs_path fs_weakly_canonical(fs_cpath p, fs_error_code *ec)
                                 return NULL;
                         }
 
-                        fs_path save = result;
-                        result = tmp;
-                        tmp = save;
+                        const fs_path save = result;
+                        result             = tmp;
+                        tmp                = save;
                 } else {
                         break;
                 }
@@ -3687,7 +3687,7 @@ fs_dir_iter fs_directory_iterator_opt(fs_cpath p, fs_directory_options options, 
         const fs_bool skipdenied = FS_FLAG_SET(options, fs_directory_options_skip_permission_denied);
 
 #ifdef _WIN32
-        const fs_path sp = malloc(wcslen(p) + 3);
+        const fs_path sp = malloc((wcslen(p) + 3) * sizeof(wchar_t));
         wcscpy(sp, p);
         wcscat(sp, L"\\*");
 #else // _WIN32
@@ -3700,11 +3700,11 @@ fs_dir_iter fs_directory_iterator_opt(fs_cpath p, fs_directory_options options, 
                 if (ec->type == fs_error_type_cfs
                     && ec->code == fs_err_no_such_file_or_directory)
                         FS_CLEAR_ERROR_CODE(ec);
-#ifdef _WIN32
-                free(sp);
-#endif // _WIN32
                 return (fs_dir_iter){0};
         }
+#ifdef _WIN32
+        free(sp);
+#endif // _WIN32
 
         int alloc = 4;
         int count = 0;
@@ -3723,10 +3723,6 @@ fs_dir_iter fs_directory_iterator_opt(fs_cpath p, fs_directory_options options, 
                 }
         } while (_find_next(dir, &entry, skipdenied, ec));
         FS_CLOSE_DIR(dir);
-
-#ifdef _WIN32
-        free(sp);
-#endif // _WIN32
 
         if (!count || ec->code != fs_err_success) {
                 free(elems);
