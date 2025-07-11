@@ -1,5 +1,6 @@
 #include "cfs.h"
 
+#include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -175,7 +176,6 @@ typedef struct _fs_generic_reparse_buffer       _fs_generic_reparse_buffer;
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <stdlib.h>
 #include <limits.h>
 #include <fcntl.h>
 #include <utime.h>
@@ -407,62 +407,70 @@ fs_bool _is_separator(FS_CHAR c)
 
 void _path_append_s(fs_path *pp, fs_cpath other, fs_bool realloc)
 {
-        fs_path p = *pp;
+        if (other[0] == FS_PREF('\0'))
+                return;
 
-#ifdef _WIN32
-        _fs_char_cit ortnend = _find_root_name_end(other);
-        if (_is_absolute(other, ortnend, NULL))
+        const fs_path p = *pp;
+
+        const _fs_char_cit ortnend = _find_root_name_end(other);
+        if (p[0] == FS_PREF('\0') || _is_absolute(other, ortnend, NULL))
                 goto replace;
 
-        size_t plen               = wcslen(p);
-        const size_t olen         = wcslen(other);
-        const _fs_char_it plast   = p + plen;
-        const _fs_char_cit olast  = other + olen;
-        const _fs_char_cit prtend = _find_root_name_end(p);
+        size_t plen             = FS_STR(len, p);
+        const size_t olen       = FS_STR(len, other);
+        const _fs_char_it plast = p + plen;
 
-        if (other != ortnend && wcscmp(p, other) != 0)
+#ifdef _WIN32
+        const _fs_char_cit olast   = other + olen;
+        const _fs_char_cit prtnend = _find_root_name_end(p); // == p on posix
+
+        // The following conditions are never true on posix systems:
+        //  - In the first one, other != ortnend is always false (root name end is always p).
+        //  - In the second one, ortnend != olast is always true (we already checked for e empty other),
+        //    but _is_separator(*ortnend) is always false (if path starts with '/', it's absolute)
+        //  - In the third one, prtnend == plast is always false (we already checked for empty p)
+
+        if (other != ortnend && FS_STR(ncmp, p, other, ortnend - other) != 0)
                 goto replace;
 
         if (ortnend != olast && _is_separator(*ortnend)) {
-                p[prtend - p] = '\0';
-        } else if (prtend == plast) {
-                if (prtend - p >= 3) {
-                        *plast = '\\'; // !! p now is not null terminated
+                plen = prtnend - p;
+        } else if (prtnend == plast) {
+                if (prtnend - p >= 3) {
+                        *plast = FS_PREF('\\');
                         ++plen;
                 }
-        } else if (!_is_separator(plast[-1])) {
-                *plast = '\\'; // !! p now is not null terminated
+        } else
+#endif // _WIN32
+        if (!_is_separator(plast[-1])) {
+                *plast = FS_PREF('\\');
                 ++plen;
         }
 
         fs_path newp = p;
         if (realloc) {
-                newp = malloc((plen + olen + 1 /* '\0' */) * sizeof(wchar_t));
-                memcpy(newp, p, plen * sizeof(wchar_t));
+                const size_t applen = olen - (ortnend - p);
+                newp                = malloc((plen + applen + 1) * sizeof(FS_CHAR));
+                memcpy(newp, p, plen * sizeof(FS_CHAR));
         }
 
-        newp[plen] = '\0'; // required for wcscat
-        wcscat(newp, ortnend);
+        newp[plen + 1] = '\0';
+        FS_STR(cat, newp, ortnend);
 
         if (realloc) {
-                free(*pp); // p is modified, so it cannot be used here
+                free(p);
                 *pp = newp;
         }
 
         return;
 
-// just this->operator=(other);
 replace:
         if (realloc) {
                 free(p);
-                *pp = FS_WDUP(other);
+                *pp = FS_DUP(other);
         } else {
-                wcscpy(p, other);
+                FS_STR(cpy, p, other);
         }
-
-#else // _WIN32
-#error "not implemented"
-#endif // !_WIN32
 }
 
 fs_file_status _make_status(const _fs_stat *st, fs_error_code *ec)
@@ -680,7 +688,7 @@ _fs_char_cit _find_root_name_end(fs_cpath p)
 _fs_char_cit _find_root_directory_end(_fs_char_cit rtnend)
 {
         _fs_char_cit rel = rtnend;
-        while (*rel && _is_separator(*rel)) // find_if_not
+        while (*rel && _is_separator(*rel))
                 ++rel;
 
         return rel;
@@ -1156,7 +1164,6 @@ _fs_stat _win32_get_file_stat(fs_cpath p, _fs_stats_flag flags, fs_error_code *e
                 }
 
                 const _fs_file_attr attrs = data.dwFileAttributes;
-                // Always true if !FS_SYMLINKS_SUPPORTED
                 if (!follow || !FS_FLAG_SET(attrs, _fs_file_attr_Reparse_point)) {
                         out.attributes = attrs;
                         flags         &= ~_fs_stats_flag_Attributes;

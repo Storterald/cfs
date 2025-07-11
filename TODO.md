@@ -57,9 +57,7 @@
    - [X] fs_status_known
    - [X] fs_path_append
    - [X] fs_path_append_v
-   - [ ] fs_path_append_s
-     - [X] Windows
-     - [ ] Linux
+   - [X] fs_path_append_s
    - [X] fs_path_concat
    - [X] fs_path_concat_s
    - [X] fs_path_clear
@@ -117,3 +115,7 @@
  - [ ] Check parameters
  - [ ] Verify minimum OS version off all API calls used (Windows, Linux, macOS, FreeBSD)
  - [ ] Make sure every call that returns path handles resizes (with for (;;) or similar)
+ - [ ] Don't precompute all directory iterators members
+ - [ ] Maybe switch to C89
+ - [ ] Fix mixed styling
+ - [ ] Add '\\?\' if a path is > MAX_PATH in windows (check if >10)
