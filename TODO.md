@@ -91,9 +91,8 @@
    - [X] fs_path_end
    - [X] fs_path_iter_next
    - [X] fs_path_iter_prev
-   - [ ] fs_directory_iterator
-     - [X] Windows
-     - [ ] Linux
+   - [X] fs_directory_iterator
+   - [X] fs_directory_iterator_opt
    - [X] fs_dir_iter_next
    - [X] fs_dir_iter_prev
    - [X] fs_recursive_directory_iterator

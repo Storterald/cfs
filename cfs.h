@@ -148,9 +148,9 @@ typedef enum fs_copy_options {
 } fs_copy_options;
 
 typedef enum fs_directory_options {
-        fs_directory_options_none                     = 0,
-        fs_directory_options_follow_directory_symlink = 1,
-        fs_directory_options_skip_permission_denied   = 2
+        fs_directory_options_none                     = 0x0,
+        fs_directory_options_follow_directory_symlink = 0x1,
+        fs_directory_options_skip_permission_denied   = 0x2
 
 } fs_directory_options;
 
@@ -398,6 +398,8 @@ void fs_path_iter_next(fs_path_iter *it);
 void fs_path_iter_prev(fs_path_iter *it);
 
 fs_dir_iter fs_directory_iterator(fs_cpath p, fs_error_code *ec);
+
+fs_dir_iter fs_directory_iterator_opt(fs_cpath p, fs_directory_options options, fs_error_code *ec);
 
 void fs_dir_iter_next(fs_dir_iter *it);
 
