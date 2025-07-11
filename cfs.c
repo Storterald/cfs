@@ -317,18 +317,20 @@ char *_fs_error_string(fs_error_type type, int e)
                         return FS_SDUP("cfs error: success");
                 case fs_err_no_such_file_or_directory:
                         return FS_SDUP("cfs error: no such file or directory");
-                case fs_err_invalid_argument:
-                        return FS_SDUP("cfs error: invalid argument");
-                case fs_err_function_not_supported:
-                        return FS_SDUP("cfs error: function not supported");
                 case fs_err_file_exists:
-                        return FS_SDUP("cfs error: file already _exists");
+                        return FS_SDUP("cfs error: file already exists");
+                case fs_err_not_a_directory:
+                        return FS_SDUP("cfs error: iter is not a directory");
                 case fs_err_is_a_directory:
                         return FS_SDUP("cfs error: item is a directory");
-                case fs_err_loop:
-                        return FS_SDUP("cfs error: symlink loop");
+                case fs_err_invalid_argument:
+                        return FS_SDUP("cfs error: invalid argument");
                 case fs_err_name_too_long:
                         return FS_SDUP("cfs error: name too long");
+                case fs_err_function_not_supported:
+                        return FS_SDUP("cfs error: function not supported");
+                case fs_err_loop:
+                        return FS_SDUP("cfs error: symlink loop");
 #ifdef _WIN32
                 case fs_err_reparse_tag_invalid:
                         return FS_SDUP("cfs error: invalid reparse tag");
@@ -888,8 +890,8 @@ fs_path _win32_get_final_path(fs_cpath p, _fs_path_kind *pkind, fs_error_code *e
                 return NULL;
 #endif // FS_SYMLINKS_SUPPORTED
 
-        DWORD len       = MAX_PATH;
-        _fs_char_it buf = malloc(len * sizeof(wchar_t));
+        DWORD len   = MAX_PATH;
+        fs_path buf = malloc(len * sizeof(wchar_t));
 
         for (;;) {
 #ifdef FS_SYMLINKS_SUPPORTED
@@ -1251,11 +1253,10 @@ fs_file_type _posix_get_file_type(const struct stat *st)
 fs_bool _posix_create_dir(fs_cpath p, fs_perms perms, fs_error_code *ec) {
         if (mkdir(p, perms)) {
                 FS_SYSTEM_ERROR(ec, errno);
-        } else {
-                return FS_TRUE;
+                return FS_FALSE;
         }
 
-        return FS_FALSE;
+        return FS_TRUE;
 }
 
 void _posix_copy_file_fallback(int in, int out, size_t len, fs_error_code *ec)
@@ -2006,17 +2007,64 @@ fs_bool fs_create_directories(fs_cpath p, fs_error_code *ec)
         }
 #endif // !NDEBUG
 
+        if (fs_exists(p, ec) || ec->code != fs_err_success)
+                return FS_FALSE;
+
 #ifdef _WIN32
-        int r = SHCreateDirectoryExW(NULL, p, NULL);
+        const int r = SHCreateDirectoryExW(NULL, p, NULL);
         if (r != ERROR_SUCCESS) {
                 FS_SYSTEM_ERROR(ec, r);
                 return FS_FALSE;
         }
+        return FS_TRUE;
 #else // _WIN32
-#error "not implemented"
+        fs_path_iter it  = fs_path_begin(p);
+        fs_bool existing = FS_TRUE;
+        fs_path current;
+
+        if (fs_path_is_absolute(p)) {
+                fs_path_iter_next(&it);
+                current = strdup("/");
+        } else {
+                current = fs_current_path(ec);
+        }
+
+        for (; *FS_DEREF_PATH_ITER(it); fs_path_iter_next(&it)) {
+                const fs_cpath elem = FS_DEREF_PATH_ITER(it);
+                if (strcmp(elem, ".") == 0)
+                        continue;
+                if (strcmp(elem, "..") == 0) {
+                        fs_path tmp = current;
+                        current     = fs_path_parent_path(current);
+                        free(tmp);
+                        continue;
+                }
+
+                _path_append_s(&current, elem, FS_TRUE);
+
+                _fs_stat st;
+                const fs_file_status stat = _status(current, &st, ec);
+                if (ec->code != fs_err_success)
+                        goto defer;
+
+                if (existing && ((existing = fs_exists_s(stat)))) {
+                        if (!fs_is_directory_s(stat)) {
+                                FS_CFS_ERROR(ec, fs_err_not_a_directory);
+                                goto defer;
+                        }
+                } else {
+                        _posix_create_dir(current, fs_perms_all, ec);
+                        if (ec->code != fs_err_success)
+                                goto defer;
+                }
+        }
+
+        defer:
+                free(current);
+        FS_DESTROY_PATH_ITER(it);
+        return FS_FALSE;
 #endif // !_WIN32
 
-        return FS_TRUE;
 }
 
 void fs_create_hard_link(fs_cpath target, fs_cpath link, fs_error_code *ec)
@@ -2817,18 +2865,42 @@ fs_file_status fs_symlink_status(fs_cpath p, fs_error_code *ec)
 fs_path fs_temp_directory_path(fs_error_code *ec)
 {
         FS_CLEAR_ERROR_CODE(ec);
-        FS_STACK_PATH_DECLARATION(tmp);
 
 #ifdef _WIN32
-        if (!GetTempPathW(MAX_PATH, tmp)) {
-                FS_SYSTEM_ERROR(ec, GetLastError());
-                return FS_DUP(FS_PREF(""));
-        }
-#else // _WIN32
-#error "not implemented"
-#endif // !_WIN32
+        DWORD len   = MAX_PATH;
+        fs_path buf = malloc(len * sizeof(wchar_t));
 
-        return FS_DUP(tmp);
+        for (;;) {
+                const DWORD req = GetTempPathW(len, buf);
+                if (req == 0) {
+                        FS_SYSTEM_ERROR(ec, GetLastError());
+                        return FS_WDUP(L"");
+                }
+
+                if (req > len) {
+                        free(buf);
+                        buf = malloc(req * sizeof(wchar_t));
+                        len = req;
+                } else {
+                        break;
+                }
+        }
+
+        return buf;
+#else // _WIN32
+        const char *envs[4] = { "TMPDIR", "TMP", "TEMP", "TEMPDIR" };
+        for (int i = 0; i < 4; ++i) {
+#ifdef _GNU_SOURCE
+                const char *tmpdir = secure_getenv(envs[i]);
+#else // _GNU_SOURCE
+                const char *tmpdir = getenv(envs[i]);
+#endif // !_GNU_SOURCE
+                if (tmpdir)
+                        return strdup(tmpdir);
+        }
+
+        return strdup("/tmp");
+#endif // !_WIN32
 }
 
 fs_bool fs_is_block_file_s(fs_file_status s)
@@ -3654,7 +3726,7 @@ fs_dir_iter fs_directory_iterator(fs_cpath p, fs_error_code *ec)
                 if (wcscmp(findFileData.cFileName, L".") != 0 && wcscmp(findFileData.cFileName, L"..") != 0) {
                         // using search path as a buffer to avoid allocs.
                         _path_append_s(&base, findFileData.cFileName, FS_FALSE);
-                        elems[count++] = FS_DUP(base);
+                        elems[count++] = FS_WDUP(base);
                         base[len]      = '\0'; // restore p every time
                 }
         } while (FindNextFileW(hFind, &findFileData));

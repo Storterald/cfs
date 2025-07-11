@@ -164,12 +164,13 @@ typedef enum fs_error_type {
 typedef enum fs_err {
         fs_err_success                   = 0,
         fs_err_no_such_file_or_directory = ENOENT,
-        fs_err_invalid_argument          = EINVAL,
-        fs_err_function_not_supported    = ENOSYS,
         fs_err_file_exists               = EEXIST,
+        fs_err_not_a_directory           = ENOTDIR,
         fs_err_is_a_directory            = EISDIR,
-        fs_err_loop                      = ELOOP,
+        fs_err_invalid_argument          = EINVAL,
         fs_err_name_too_long             = ENAMETOOLONG,
+        fs_err_function_not_supported    = ENOSYS,
+        fs_err_loop                      = ELOOP,
 #ifdef _WIN32
         fs_err_reparse_tag_invalid
 #endif // _WIN32
@@ -202,8 +203,8 @@ typedef struct fs_path_iter {
 } fs_path_iter;
 
 typedef struct fs_dir_iter {
-        uint32_t pos;
-        fs_cpath *elems;
+        ptrdiff_t pos;
+        fs_cpath  *elems;
 
 } fs_dir_iter;
 

@@ -13,9 +13,7 @@
    - [X] fs_copy_symlink
    - [X] fs_create_directory
    - [X] ds_create_directory_cp
-   - [ ] fs_create_directories
-     - [X] Windows
-     - [ ] Linux
+   - [X] fs_create_directories
    - [X] fs_create_hard_link
    - [X] fs_create_symlink
    - [X] fs_create_directory_symlink
@@ -38,9 +36,7 @@
    - [X] fs_space
    - [X] fs_status
    - [X] fs_symlink_status
-   - [ ] fs_temp_directory_path
-     - [X] Windows
-     - [ ] Linux
+   - [X] fs_temp_directory_path
    - [X] fs_is_block_file_s
    - [X] fs_is_block_file
    - [X] fs_is_character_file_s
@@ -120,3 +116,4 @@
  - [ ] Make api return error and return old output by parameter pointer
  - [ ] Check parameters
  - [ ] Verify minimum OS version off all API calls used (Windows, Linux, macOS, FreeBSD)
+ - [ ] Make sure every call that returns path handles resizes (with for (;;) or similar)
