@@ -96,9 +96,7 @@
    - [X] fs_dir_iter_next
    - [X] fs_dir_iter_prev
    - [X] fs_recursive_directory_iterator
-   - [ ] fs_recursive_directory_iterator_opt
-     - [X] Windows
-     - [ ] Linux
+   - [X] fs_recursive_directory_iterator_opt
    - [X] fs_recursive_dir_iter_next
    - [X] fs_recursive_dir_iter_prev
 

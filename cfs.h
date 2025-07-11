@@ -134,7 +134,8 @@ typedef enum fs_copy_options {
         fs_copy_options_overwrite_existing = 0x2,
         fs_copy_options_update_existing    = 0x4,
 
-        fs_copy_options_recursive = 0x10,
+        _fs_copy_options_In_recursive_copy = 0x8,
+        fs_copy_options_recursive          = 0x10,
 
         _fs_copy_Symlinks_mask        = 0xF00,
         fs_copy_options_copy_symlinks = 0x100,

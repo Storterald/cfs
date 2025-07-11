@@ -11,8 +11,6 @@ if (MSVC)
                 PRIVATE "/WX"
                 PRIVATE "/wd4820"  # Silence implicit padding
                 PRIVATE "/wd5045"  # Silence spectre mitigation
-                PRIVATE "/wd5287"
-                PRIVATE "/wd5286"
 
                 # Silenced due to WinAPI:
                 PRIVATE "/wd4668")
@@ -23,8 +21,7 @@ else ()
                 PRIVATE "-Wall"
                 PRIVATE "-Wextra"
                 PRIVATE "-Wpedantic"
-                PRIVATE "-Werror"
-                PRIVATE "-Wno-unused-parameter")
+                PRIVATE "-Werror")
 endif ()
 
 if (BUILD_TESTS)
