@@ -2715,19 +2715,27 @@ uintmax_t fs_remove_all(fs_cpath p, fs_error_code *ec)
         }
 #endif // !NDEBUG
 
-        uintmax_t count = 0;
-        fs_recursive_dir_iter it = fs_recursive_directory_iterator(p, ec);
+        fs_dir_iter it = fs_directory_iterator(p, ec);
         if (ec->code != fs_err_success)
                 return (uintmax_t)-1;
 
-        FOR_EACH_ENTRY_IN_RDIR(path, it) {
-                fs_remove(FS_DEREF_RDIR_ITER(it), ec);
+        uintmax_t count = 0;
+        FOR_EACH_ENTRY_IN_DIR(path, it) {
+                const fs_cpath elem = FS_DEREF_RDIR_ITER(it);
+                if (fs_is_directory(path, ec)) {
+                        count += fs_remove_all(elem, ec);
+                        if (ec->code != fs_err_success)
+                                break;
+                }
+
                 if (ec->code != fs_err_success)
                         break;
 
-                ++count;
+                count += fs_remove(elem, ec);
+                if (ec->code != fs_err_success)
+                        break;
         }
-        FS_DESTROY_RDIR_ITER(it);
+        FS_DESTROY_DIR_ITER(it);
 
         return count;
 }
@@ -3785,8 +3793,9 @@ fs_dir_iter fs_directory_iterator_opt(fs_cpath p, fs_directory_options options, 
         }
 
         fs_cpath *elems = NULL;
-        uint32_t count  = 0;
+        int count  = 0;
 
+        // TODO follow symlink
         const fs_bool skipdenied = FS_FLAG_SET(options, fs_directory_options_skip_permission_denied);
 
 #ifdef _WIN32
@@ -3798,7 +3807,7 @@ fs_dir_iter fs_directory_iterator_opt(fs_cpath p, fs_directory_options options, 
 #endif // !_WIN32
 
         _fs_dir_entry entry;
-        _fs_dir dir = _find_first(sp, &entry, skipdenied, ec);
+        const _fs_dir dir = _find_first(sp, &entry, skipdenied, ec);
         if (ec->code != fs_err_success) {
                 if (ec->type == fs_error_type_cfs
                     && ec->code == fs_err_no_such_file_or_directory)
@@ -3806,23 +3815,8 @@ fs_dir_iter fs_directory_iterator_opt(fs_cpath p, fs_directory_options options, 
                 return (fs_dir_iter){0};
         }
 
-        do {
-                if (FS_STR(cmp, FS_DIR_ENTRY_NAME(entry), FS_PREF(".")) != 0
-                    && FS_STR(cmp, FS_DIR_ENTRY_NAME(entry), FS_PREF("..")) != 0)
-                        ++count;
-        } while (_find_next(dir, &entry, skipdenied, ec));
-        FS_CLOSE_DIR(dir);
-
-        if (!count || ec->code != fs_err_success)
-                return (fs_dir_iter){0};
-
-        dir = _find_first(sp, &entry, skipdenied, ec);
-        if (ec->code != fs_err_success)
-                return (fs_dir_iter){0};
-
-        // allocate one extra space for the NULL iterator
-        fs_cpath *buf = malloc((count + 1) * sizeof(fs_cpath));
-        count = 0;
+        int alloc = 4;
+        fs_cpath *buf = malloc((alloc + 1) * sizeof(fs_cpath));
 
         do {
                 if (FS_STR(cmp, FS_DIR_ENTRY_NAME(entry), FS_PREF(".")) == 0
@@ -3830,10 +3824,15 @@ fs_dir_iter fs_directory_iterator_opt(fs_cpath p, fs_directory_options options, 
                         continue;
 
                 buf[count++] = fs_path_append(p, FS_DIR_ENTRY_NAME(entry));
+
+                if (count == alloc) {
+                        alloc *= 2;
+                        buf    = realloc(buf, (alloc + 1) * sizeof(fs_cpath));
+                }
         } while (_find_next(dir, &entry, skipdenied, ec));
         FS_CLOSE_DIR(dir);
 
-        if (ec->code != fs_err_success)
+        if (!count || ec->code != fs_err_success)
                 return (fs_dir_iter){0};
 
         buf[count] = NULL;
