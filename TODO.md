@@ -1,6 +1,23 @@
-# Version alpha-1.0.0
+# Version 1.1.0-alpha
 
- - [ ] std::filesystem API
+- [ ] Optimize functions avoiding multiple equal parsing calls
+- [ ] Tests with GoogleTest
+- [ ] GitHub actions for Windows, Linux and macOS
+- [ ] Extra utilities
+   - [ ] Directory iterators to string
+- [ ] Verify alloctions
+- [ ] Make api return error and return old output by parameter pointer
+- [ ] Check parameters
+- [ ] Verify minimum OS version off all API calls used (Windows, Linux, macOS, FreeBSD)
+- [ ] Make sure every call that returns path handles resizes (with for (;;) or similar)
+- [ ] Don't precompute all directory iterators members
+- [ ] Maybe switch to C89
+- [ ] Fix mixed styling
+- [ ] Add '\\?\' if a path is > MAX_PATH in windows (check if >10)
+
+# Version 1.0.0-alpha
+
+ - [X] std::filesystem API
    - [X] fs_absolute
    - [X] fs_canonical
    - [X] fs_weakly_canonical
@@ -99,20 +116,3 @@
    - [X] fs_recursive_directory_iterator_opt
    - [X] fs_recursive_dir_iter_next
    - [X] fs_recursive_dir_iter_prev
-
-# Version alpha-1.1.0
-
- - [ ] Optimize functions avoiding multiple equal parsing calls
- - [ ] Tests with GoogleTest
- - [ ] GitHub actions for Windows, Linux and macOS
- - [ ] Extra utilities
-   - [ ] Directory iterators to string
- - [ ] Verify alloctions
- - [ ] Make api return error and return old output by parameter pointer
- - [ ] Check parameters
- - [ ] Verify minimum OS version off all API calls used (Windows, Linux, macOS, FreeBSD)
- - [ ] Make sure every call that returns path handles resizes (with for (;;) or similar)
- - [ ] Don't precompute all directory iterators members
- - [ ] Maybe switch to C89
- - [ ] Fix mixed styling
- - [ ] Add '\\?\' if a path is > MAX_PATH in windows (check if >10)
