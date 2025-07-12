@@ -1252,7 +1252,8 @@ fs_file_type _posix_get_file_type(const struct stat *st)
 
 fs_bool _posix_create_dir(fs_cpath p, fs_perms perms, fs_error_code *ec) {
         if (mkdir(p, perms)) {
-                FS_SYSTEM_ERROR(ec, errno);
+                if (errno != EEXIST)
+                        FS_SYSTEM_ERROR(ec, errno);
                 return FS_FALSE;
         }
 
@@ -1949,12 +1950,14 @@ fs_bool fs_create_directory(fs_cpath p, fs_error_code *ec)
 
 #ifdef _WIN32
         if (!CreateDirectoryW(p, NULL)) {
-                FS_SYSTEM_ERROR(ec, GetLastError());
+                const DWORD err = GetLastError();
+                if (err != fs_win_error_already_exists)
+                        FS_SYSTEM_ERROR(ec, err);
                 return FS_FALSE;
         }
         return FS_TRUE;
 #else // _WIN32
-        return _posix_create_dir(p, fs_perms_all);
+        return _posix_create_dir(p, fs_perms_all, ec);
 #endif // !_WIN32
 }
 
@@ -1976,10 +1979,7 @@ fs_bool fs_create_directory_cp(fs_cpath p, fs_cpath existing_p, fs_error_code *e
         }
         return FS_TRUE;
 #else // _WIN32
-        const fs_file_status status = fs_status(existing_p, ec);
-        if (ec->code != fs_err_success)
-                return FS_FALSE;
-        return _posix_create_dir(p, status.perms);
+        return _posix_create_dir(p, status.perms, ec);
 #endif // !_WIN32
 }
 
