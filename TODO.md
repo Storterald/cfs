@@ -14,6 +14,7 @@
 - [ ] Maybe switch to C89
 - [ ] Fix mixed styling
 - [ ] Add '\\?\' if a path is > MAX_PATH in windows (check if >10)
+- [ ] System error enums (Windows and Posix)
 
 # Version 1.0.0-alpha
 

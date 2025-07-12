@@ -12,18 +12,18 @@ do {                                            \
         *ec = (fs_error_code){0};               \
 } while (FS_FALSE)
 
-#define FS_CFS_ERROR(pec, e)                            \
+#define FS_CFS_ERROR(ec, e)                             \
 do {                                                    \
-        (pec)->type = fs_error_type_cfs;                \
-        (pec)->code = e;                                \
-        (pec)->msg = _fs_error_string(pec->type, e);    \
+        (ec)->type = fs_error_type_cfs;                 \
+        (ec)->code = e;                                 \
+        (ec)->msg = _fs_error_string((ec)->type, e);    \
 } while (FS_FALSE)
 
-#define FS_SYSTEM_ERROR(pec, e)                         \
+#define FS_SYSTEM_ERROR(ec, e)                          \
 do {                                                    \
-        (pec)->type = fs_error_type_system;             \
-        (pec)->code = e;                                \
-        (pec)->msg = _fs_error_string(pec->type, e);    \
+        (ec)->type = fs_error_type_system;              \
+        (ec)->code = e;                                 \
+        (ec)->msg = _fs_error_string((ec)->type, e);    \
 } while (FS_FALSE)
 
 #ifndef NDEBUG
@@ -43,23 +43,19 @@ fs_bool fs_is_##what(fs_cpath p, fs_error_code *ec)             \
                                                                 \
         return fs_is_##what##_s(status);                        \
 }
-#else // NDEBUG
+#else // !NDEBUG
 #define FS_IS_X_FOO_DECL(what)                          \
 fs_bool fs_is_##what(fs_cpath p, fs_error_code *ec)     \
 {                                                       \
-        FS_PREPARE_ERROR_CODE(ec);                      \
+        FS_CLEAR_ERROR_CODE(ec);                        \
                                                         \
-        const fs_file_status status = {                 \
-                get_type(p, FS_FALSE, ec),              \
-                fs_perms_unknown                        \
-        };                                              \
-                                                        \
+        const fs_file_status status = fs_status(p, ec); \
         if (ec->code != fs_err_success)                 \
                 return FS_FALSE;                        \
                                                         \
         return fs_is_##what##_s(status);                \
 }
-#endif // !NDEBUG
+#endif // NDEBUG
 
 #ifdef _WIN32
 #include <windows.h>
@@ -73,10 +69,10 @@ fs_bool fs_is_##what(fs_cpath p, fs_error_code *ec)     \
 #define FS_STR(__foo__, ...) wcs##__foo__(__VA_ARGS__)
 #define FS_DUP FS_WDUP
 
-#define IS_ENOENT(__err__)                      \
-        ((__err__) == ERROR_PATH_NOT_FOUND      \
-        || (__err__) == ERROR_FILE_NOT_FOUND    \
-        || (__err__) == ERROR_INVALID_NAME)
+#define IS_ENOENT(__err__)                              \
+        ((__err__) == fs_win_error_path_not_found       \
+        || (__err__) == fs_win_error_file_not_found     \
+        || (__err__) == fs_win_error_invalid_name)
 
 #ifdef CreateSymbolicLink
 #define FS_SYMLINKS_SUPPORTED
@@ -109,23 +105,42 @@ typedef enum _fs_file_flags {
 
 // enumerator value which exceeds the range of 'int' is a C23 extension
 typedef DWORD _fs_file_attr;
-#define _fs_file_attr_Readonly      FILE_ATTRIBUTE_READONLY
-#define _fs_file_attr_Hidden        FILE_ATTRIBUTE_HIDDEN
-#define _fs_file_attr_System        FILE_ATTRIBUTE_SYSTEM
-#define _fs_file_attr_Directory     FILE_ATTRIBUTE_DIRECTORY
-#define _fs_file_attr_Archive       FILE_ATTRIBUTE_ARCHIVE
-#define _fs_file_attr_Device        FILE_ATTRIBUTE_DEVICE
-#define _fs_file_attr_Normal        FILE_ATTRIBUTE_NORMAL
-#define _fs_file_attr_Temporary     FILE_ATTRIBUTE_TEMPORARY
-#define _fs_file_attr_Sparse_file   FILE_ATTRIBUTE_SPARSE_FILE
-#define _fs_file_attr_Reparse_point FILE_ATTRIBUTE_REPARSE_POINT
-#define _fs_file_attr_Invalid       INVALID_FILE_ATTRIBUTES
+enum {
+        _fs_file_attr_Readonly      = FILE_ATTRIBUTE_READONLY,
+        _fs_file_attr_Hidden        = FILE_ATTRIBUTE_HIDDEN,
+        _fs_file_attr_System        = FILE_ATTRIBUTE_SYSTEM,
+        _fs_file_attr_Directory     = FILE_ATTRIBUTE_DIRECTORY,
+        _fs_file_attr_Archive       = FILE_ATTRIBUTE_ARCHIVE,
+        _fs_file_attr_Device        = FILE_ATTRIBUTE_DEVICE,
+        _fs_file_attr_Normal        = FILE_ATTRIBUTE_NORMAL,
+        _fs_file_attr_Temporary     = FILE_ATTRIBUTE_TEMPORARY,
+        _fs_file_attr_Sparse_file   = FILE_ATTRIBUTE_SPARSE_FILE,
+        _fs_file_attr_Reparse_point = FILE_ATTRIBUTE_REPARSE_POINT
+};
+#define _fs_file_attr_Invalid         INVALID_FILE_ATTRIBUTES
 
 // enumerator value which exceeds the range of 'int' is a C23 extension
 typedef DWORD _fs_reparse_tag;
-#define _fs_reparse_tag_None        0
+enum {
+        _fs_reparse_tag_None = 0
+};
 #define _fs_reparse_tag_Mount_point IO_REPARSE_TAG_MOUNT_POINT
 #define _fs_reparse_tag_Symlink     IO_REPARSE_TAG_SYMLINK
+
+typedef enum _fs_symbolic_link_flags {
+        _fs_symbolic_link_flag_None                      = 0x0,
+        _fs_symbolic_link_flag_Directory                 = 0x1,
+        _fs_symbolic_link_flag_Allow_unprivileged_create = 0x2,
+
+} _fs_symbolic_link_flag;
+
+typedef enum _fs_file_share_flags {
+        _fs_file_share_flags_None   = 0,
+        _fs_file_share_flags_Read   = FILE_SHARE_READ,
+        _fs_file_share_flags_Write  = FILE_SHARE_WRITE,
+        _fs_file_share_flags_Delete = FILE_SHARE_DELETE,
+
+} _fs_file_share_flags;
 
 typedef HANDLE _fs_dir;
 typedef WIN32_FIND_DATAW _fs_dir_entry;
@@ -245,7 +260,7 @@ typedef const FS_CHAR *_fs_char_cit;
 
 // -------- Helper functions
 
-static char *_fs_error_string(fs_error_type type, int e);
+static char *_fs_error_string(fs_error_type type, uint32_t e);
 FS_FORCE_INLINE static fs_path _dupe_string(fs_cpath first, fs_cpath last);
 static int _compare_time(const fs_file_time_type *t1, const fs_file_time_type *t2);
 
@@ -315,7 +330,7 @@ fs_bool _linux_sendfile(int in, int out, size_t len, fs_error_code *ec);
 
 //          Helper functions --------
 
-char *_fs_error_string(fs_error_type type, int e)
+char *_fs_error_string(fs_error_type type, uint32_t e)
 {
         switch (type) {
         case fs_error_type_none:
@@ -340,26 +355,54 @@ char *_fs_error_string(fs_error_type type, int e)
                         return FS_SDUP("cfs error: function not supported");
                 case fs_err_loop:
                         return FS_SDUP("cfs error: symlink loop");
-#ifdef _WIN32
-                case fs_err_reparse_tag_invalid:
-                        return FS_SDUP("cfs error: invalid reparse tag");
-#endif // _WIN32
                 }
                 break; // Safety if there is a missing case above
-        case fs_error_type_system:  ;
-                const char pref[] = "cfs error: system error: ";
+        case fs_error_type_system:  ; // Empty statement is required for declaration
 #ifdef _WIN32
-                LPVOID msgBuffer;
-                FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                        NULL, e, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                        (LPSTR)&msgBuffer, 0, NULL);
-
-                char *msg = malloc(sizeof(pref) + strlen((char *)msgBuffer));
-                strcpy(msg, pref);
-                strcat(msg, (char *)msgBuffer);
-
-                LocalFree(msgBuffer);
-                return msg;
+                switch ((fs_win_errors)e) {
+                case fs_win_error_success:
+                        return FS_SDUP("cfs windows error: success");
+                case fs_win_error_invalid_function:
+                        return FS_SDUP("cfs windows error: invalid function");
+                case fs_win_error_file_not_found:
+                        return FS_SDUP("cfs windows error: file not found");
+                case fs_win_error_path_not_found:
+                        return FS_SDUP("cfs windows error: path not found");
+                case fs_win_error_access_denied:
+                        return FS_SDUP("cfs windows error: access denied");
+                case fs_win_error_not_enough_memory:
+                        return FS_SDUP("cfs windows error: not enough memory");
+                case fs_win_error_no_more_files:
+                        return FS_SDUP("cfs windows error: no more files");
+                case fs_win_error_sharing_violation:
+                        return FS_SDUP("cfs windows error: sharing violation");
+                case fs_win_error_not_supported:
+                        return FS_SDUP("cfs windows error: not supported");
+                case fs_win_error_bad_netpath:
+                        return FS_SDUP("cfs windows error: bad netpath");
+                case fs_win_error_netname_deleted:
+                        return FS_SDUP("cfs windows error: netname deleted");
+                case fs_win_error_file_exists:
+                        return FS_SDUP("cfs windows error: file exists");
+                case fs_win_error_invalid_parameter:
+                        return FS_SDUP("cfs windows error: invalid parameter");
+                case fs_win_error_insufficient_buffer:
+                        return FS_SDUP("cfs windows error: insufficient buffer");
+                case fs_win_error_invalid_name:
+                        return FS_SDUP("cfs windows error: invalid name");
+                case fs_win_error_directory_not_empty:
+                        return FS_SDUP("cfs windows error: directory not empty");
+                case fs_win_error_already_exists:
+                        return FS_SDUP("cfs windows error: already exists");
+                case fs_win_error_filename_exceeds_range:
+                        return FS_SDUP("cfs windows error: filename exceeds range");
+                case fs_win_error_directory_name_is_invalid:
+                        return FS_SDUP("cfs windows error: invalid directory name");
+                case fs_win_error_reparse_tag_invalid:
+                        return FS_SDUP("cfs windows error: invalid reparse tag");
+                default:
+                        return FS_SDUP("cfs windows error: unknown error");
+                }
 #else // _WIN32
                 char *err = strerror(e);
                 char *msg = malloc(sizeof(pref) + strlen(err));
@@ -379,10 +422,10 @@ fs_path _dupe_string(fs_cpath first, fs_cpath last)
         if (first == last)
                 return FS_DUP(FS_PREF(""));
 
-        const size_t len = last - first;
+        const size_t len  = last - first;
         const size_t size = (len + 1) * sizeof(FS_CHAR);
 
-        fs_path out = malloc(size);
+        const fs_path out = malloc(size);
         memcpy(out, first, size);
         out[len] = '\0';
 
@@ -418,7 +461,7 @@ fs_file_status _make_status(const _fs_stat *st, fs_error_code *ec)
 {
 #ifdef _WIN32
         if (ec->type != fs_error_type_none) {
-                if (ec->type == fs_error_type_system && ec->code != ERROR_SUCCESS) {
+                if (ec->type == fs_error_type_system && ec->code != fs_win_error_success) {
                         FS_CLEAR_ERROR_CODE(ec);
                         return (fs_file_status){
                                 .type  = IS_ENOENT(ec->code) ?
@@ -539,7 +582,7 @@ _fs_dir _find_first(fs_cpath p, _fs_dir_entry *entry, fs_bool skipdenied, fs_err
                 const DWORD err = GetLastError();
                 if (IS_ENOENT(err))
                         FS_CFS_ERROR(ec, fs_err_no_such_file_or_directory);
-                else if (!skipdenied || err != ERROR_ACCESS_DENIED)
+                else if (!skipdenied || err != fs_win_error_access_denied)
                         FS_SYSTEM_ERROR(ec, err);
 
                 return INVALID_HANDLE_VALUE;
@@ -565,10 +608,10 @@ fs_bool _find_next(_fs_dir dir, _fs_dir_entry *entry, fs_bool skipdenied, fs_err
                 return FS_TRUE;
 
         const DWORD err = GetLastError();
-        if (err == ERROR_NO_MORE_FILES)
+        if (err == fs_win_error_no_more_files)
                 return FS_FALSE;
 
-        if (err == ERROR_ACCESS_DENIED && skipdenied)
+        if (skipdenied && err == fs_win_error_access_denied)
                 return FS_FALSE;
 
         FS_SYSTEM_ERROR(ec, err);
@@ -870,7 +913,9 @@ fs_bool _win32_relative_path_contains_root_name(fs_cpath p) {
 
 HANDLE _win32_get_handle(fs_cpath p, _fs_access_rights rights, _fs_file_flags flags, fs_error_code *ec)
 {
-        const DWORD shareMode = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
+        const _fs_file_share_flags shareMode = _fs_file_share_flags_Read
+                | _fs_file_share_flags_Write
+                | _fs_file_share_flags_Delete;
         const HANDLE handle = CreateFileW(p, rights, shareMode, NULL, OPEN_EXISTING, flags, NULL);
         if (handle == INVALID_HANDLE_VALUE) {
                 const DWORD err = GetLastError();
@@ -907,7 +952,7 @@ fs_path _win32_read_symlink(fs_cpath p, fs_error_code *ec)
         uint32_t len;
         wchar_t *offset;
 
-        if (rdata->reparse_tag == IO_REPARSE_TAG_SYMLINK) {
+        if (rdata->reparse_tag == _fs_reparse_tag_Symlink) {
                 _fs_symbolic_link_reparse_buffer *sbuf = &rdata->buffer.symbolic_link_reparse_buffer;
                 const USHORT tmp = sbuf->print_name_length / sizeof(wchar_t);
 
@@ -920,7 +965,7 @@ fs_path _win32_read_symlink(fs_cpath p, fs_error_code *ec)
                         len              = sbuf->print_name_length / sizeof(wchar_t);
                         offset           = &sbuf->path_buffer[idx];
                 }
-        } else if (rdata->reparse_tag == IO_REPARSE_TAG_MOUNT_POINT) {
+        } else if (rdata->reparse_tag == _fs_reparse_tag_Mount_point) {
                 _fs_mount_point_reparse_buffer *jbuf = &rdata->buffer.mount_point_reparse_buffer;
                 const USHORT tmp                     = jbuf->print_name_length / sizeof(wchar_t);
 
@@ -934,7 +979,7 @@ fs_path _win32_read_symlink(fs_cpath p, fs_error_code *ec)
                         offset           = &jbuf->path_buffer[idx];
                 }
         } else {
-                FS_CFS_ERROR(ec, fs_err_reparse_tag_invalid);
+                FS_SYSTEM_ERROR(ec, fs_win_error_reparse_tag_invalid);
                 CloseHandle(hFile);
                 return NULL;
         }
@@ -968,7 +1013,7 @@ fs_path _win32_get_final_path(fs_cpath p, _fs_path_kind *pkind, fs_error_code *e
 
                 if (len == 0) {
                         const DWORD err = GetLastError();
-                        if (err == ERROR_PATH_NOT_FOUND && kind == _fs_path_kind_Dos) {
+                        if (err == fs_win_error_path_not_found && kind == _fs_path_kind_Dos) {
                                 kind = _fs_path_kind_Nt;
                                 continue;
                         }
@@ -1001,15 +1046,15 @@ fs_path _win32_get_final_path(fs_cpath p, _fs_path_kind *pkind, fs_error_code *e
 void _win32_change_file_permissions(fs_cpath p, fs_bool follow, fs_bool readonly, fs_error_code *ec)
 {
         const DWORD oldattrs = GetFileAttributesW(p);
-        if (oldattrs == INVALID_FILE_ATTRIBUTES) {
+        if (oldattrs == _fs_file_attr_Invalid) {
                 FS_SYSTEM_ERROR(ec, GetLastError());
                 return;
         }
 
-        const DWORD rdtest = readonly ? FILE_ATTRIBUTE_READONLY : 0;
+        const DWORD rdtest = readonly ? _fs_file_attr_Readonly : 0;
 
 #ifdef FS_SYMLINKS_SUPPORTED
-        if (follow && FS_FLAG_SET(oldattrs, FILE_ATTRIBUTE_REPARSE_POINT)) {
+        if (follow && FS_FLAG_SET(oldattrs, _fs_file_attr_Reparse_point)) {
                 const _fs_access_rights flags = _fs_access_rights_File_read_attributes
                         | _fs_access_rights_File_write_attributes;
                 const HANDLE hFile = _win32_get_handle(
@@ -1023,10 +1068,10 @@ void _win32_change_file_permissions(fs_cpath p, fs_bool follow, fs_bool readonly
                         goto defer;
                 }
 
-                if ((infos.FileAttributes & FILE_ATTRIBUTE_READONLY) == rdtest)
+                if ((infos.FileAttributes & _fs_file_attr_Readonly) == rdtest)
                         goto defer;
 
-                infos.FileAttributes ^= FILE_ATTRIBUTE_READONLY;
+                infos.FileAttributes ^= _fs_file_attr_Readonly;
                 if (SetFileInformationByHandle(hFile, FileBasicInfo, &infos, sizeof(FILE_BASIC_INFO)))
                         goto defer;
 
@@ -1038,10 +1083,10 @@ defer:
         }
 #endif // FS_SYMLINKS_SUPPORTED
 
-        if ((oldattrs & FILE_ATTRIBUTE_READONLY) == rdtest)
+        if ((oldattrs & _fs_file_attr_Readonly) == rdtest)
                 return;
 
-        if (SetFileAttributesW(p, oldattrs ^ FILE_ATTRIBUTE_READONLY))
+        if (SetFileAttributesW(p, oldattrs ^ _fs_file_attr_Readonly))
                 return;
 
         FS_SYSTEM_ERROR(ec, GetLastError());
@@ -1067,7 +1112,7 @@ _fs_stat _win32_get_file_stat(fs_cpath p, _fs_stats_flag flags, fs_error_code *e
                 WIN32_FILE_ATTRIBUTE_DATA data;
                 if (!GetFileAttributesExW(p, GetFileExInfoStandard, &data)) {
                         const DWORD err = GetLastError();
-                        if (err != ERROR_SHARING_VIOLATION) {
+                        if (err != fs_win_error_sharing_violation) {
                                 FS_SYSTEM_ERROR(ec, err);
                                 return (_fs_stat){0};
                         }
@@ -1123,7 +1168,7 @@ _fs_stat _win32_get_file_stat(fs_cpath p, _fs_stats_flag flags, fs_error_code *e
                         // Calling GetFileInformationByHandleEx with FileAttributeTagInfo
                         // fails on FAT file system with ERROR_INVALID_PARAMETER.
                         // We avoid calling this for non-reparse-points.
-                        if (FS_FLAG_SET(info.FileAttributes, FILE_ATTRIBUTE_REPARSE_POINT)) {
+                        if (FS_FLAG_SET(info.FileAttributes, _fs_file_attr_Reparse_point)) {
                                 FILE_ATTRIBUTE_TAG_INFO tag;
                                 if (!GetFileInformationByHandleEx(handle, FileAttributeTagInfo, &tag, sizeof(FILE_ATTRIBUTE_TAG_INFO))) {
                                         FS_SYSTEM_ERROR(ec, GetLastError());
@@ -1422,7 +1467,6 @@ fs_path fs_canonical(fs_cpath p, fs_error_code *ec)
         }
 
         const wchar_t ntPref[] = L"\\\\?\\GLOBALROOT";
-        // Keep the '\0' char as wcslen(buf) doesn't account for it.
         const size_t extraLen = sizeof(ntPref) / sizeof(wchar_t);
 
         wchar_t *out = malloc((extraLen + wcslen(buf)) * sizeof(wchar_t));
@@ -1851,21 +1895,11 @@ void fs_copy_symlink(fs_cpath from, fs_cpath to, fs_error_code *ec)
         }
 #endif // !NDEBUG
 
-        // TODO: optimize, fs_read_symlink already call status
-
         const fs_cpath p = fs_read_symlink(from, ec);
         if (ec->code != fs_err_success)
                 return;
 
-        if (fs_is_directory(p, ec) || ec->code != fs_err_success) {
-                if (ec->code == fs_err_success)
-                        fs_create_directory_symlink(from, to, ec);
-                goto deref;
-        }
-
-        fs_create_symlink(p, to, ec);
-
-deref:
+        fs_create_symlink(p, to, ec); // fs_create_symlink == fs_create_directory_symlink
         free((fs_path)p);
 #else // FS_SYMLINKS_SUPPORTED
         FS_CFS_ERROR(ec, _fs_err_function_not_supported);
@@ -1935,7 +1969,7 @@ fs_bool fs_create_directories(fs_cpath p, fs_error_code *ec)
 
 #ifdef _WIN32
         const int r = SHCreateDirectoryExW(NULL, p, NULL);
-        if (r != ERROR_SUCCESS) {
+        if (r != fs_win_error_success) {
                 FS_SYSTEM_ERROR(ec, r);
                 return FS_FALSE;
         }
@@ -2024,7 +2058,10 @@ void fs_create_symlink(fs_cpath target, fs_cpath link, fs_error_code *ec)
 
 #ifdef _WIN32
         const DWORD attr = GetFileAttributesW(target);
-        if (!CreateSymbolicLinkW(link, target, attr == FILE_ATTRIBUTE_DIRECTORY))
+        const DWORD flags = FS_FLAG_SET(attr, _fs_file_attr_Directory)
+                ? _fs_symbolic_link_flag_Directory
+                : _fs_symbolic_link_flag_None;
+        if (!CreateSymbolicLinkW(link, target, flags))
                 FS_SYSTEM_ERROR(ec, GetLastError());
 #else // _WIN32
         if (symlink(target, link))
@@ -2907,7 +2944,24 @@ fs_bool fs_is_symlink_s(fs_file_status s)
 {
         return _is_symlink_t(s.type);
 }
-FS_IS_X_FOO_DECL(symlink)
+
+fs_bool fs_is_symlink(fs_cpath p, fs_error_code *ec)
+{
+        FS_CLEAR_ERROR_CODE(ec);
+
+#ifndef NDEBUG
+        if (!p) {
+                FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                return FS_FALSE;
+        }
+#endif // NDEBUG
+
+        const fs_file_status status = fs_symlink_status(p, ec);
+        if (ec->code != fs_err_success)
+                return FS_FALSE;
+
+        return fs_is_symlink_s(status);
+}
 
 fs_bool fs_status_known(fs_file_status s)
 {
@@ -3137,29 +3191,20 @@ int fs_path_compare(fs_cpath p, fs_cpath other)
                 return 0;
 #endif // !NDEBUG
 
-        // TODO: this can be optimized to avoid multiple parsing
-
-        const fs_path prt = fs_path_root_name(p);
-        const fs_path ort = fs_path_root_name(other);
-        const int rtcmp   = FS_STR(cmp, prt, ort);
-
-        free(prt);
-        free(ort);
-
-        if (rtcmp)
+        const _fs_char_cit prtnend = _find_root_name_end(p);
+        const _fs_char_cit ortnend = _find_root_name_end(other);
+        const int rtcmp            = FS_STR(ncmp, p, other, prtnend - p);
+        if (rtcmp != 0)
                 return rtcmp;
 
-        const fs_bool phasrtd = fs_path_has_root_directory(p);
-        const fs_bool ohasrtd = fs_path_has_root_directory(other);
+        const _fs_char_cit prtdend = _find_root_directory_end(prtnend);
+        const _fs_char_cit ortdend = _find_root_directory_end(ortnend);
+        const fs_bool phasrtd      = _has_root_dir(prtnend, prtdend);
+        const fs_bool ohasrtd      = _has_root_dir(ortnend, ortdend);
         if (phasrtd != ohasrtd)
                 return phasrtd - ohasrtd;
 
-        const fs_path prl = fs_path_relative_path(p);
-        const fs_path orl = fs_path_relative_path(other);
-        const int rlcmp   = FS_STR(cmp, prl, orl);
-
-        free(prl);
-        free(orl);
+        const int rlcmp = FS_STR(cmp, prtdend, ortdend);
         return rlcmp;
 }
 

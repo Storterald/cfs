@@ -13,11 +13,36 @@ typedef uint8_t fs_bool;
 #define FS_FALSE 0U
 
 #ifdef _WIN32
+#include <winerror.h>
 #include <wchar.h>
 
 #define FS_CHAR wchar_t
 #define FS_PREFERRED_SEPARATOR (L'\\')
 #define FS_PREFERRED_SEPARATOR_S (L"\\")
+
+typedef enum fs_win_errors {
+        fs_win_error_success                   = ERROR_SUCCESS,
+        fs_win_error_invalid_function          = ERROR_INVALID_FUNCTION,
+        fs_win_error_file_not_found            = ERROR_FILE_NOT_FOUND,
+        fs_win_error_path_not_found            = ERROR_PATH_NOT_FOUND,
+        fs_win_error_access_denied             = ERROR_ACCESS_DENIED,
+        fs_win_error_not_enough_memory         = ERROR_NOT_ENOUGH_MEMORY,
+        fs_win_error_no_more_files             = ERROR_NO_MORE_FILES,
+        fs_win_error_sharing_violation         = ERROR_SHARING_VIOLATION,
+        fs_win_error_not_supported             = ERROR_NOT_SUPPORTED,
+        fs_win_error_bad_netpath               = ERROR_BAD_NETPATH,
+        fs_win_error_netname_deleted           = ERROR_NETNAME_DELETED,
+        fs_win_error_file_exists               = ERROR_FILE_EXISTS,
+        fs_win_error_invalid_parameter         = ERROR_INVALID_PARAMETER,
+        fs_win_error_insufficient_buffer       = ERROR_INSUFFICIENT_BUFFER,
+        fs_win_error_invalid_name              = ERROR_INVALID_NAME,
+        fs_win_error_directory_not_empty       = ERROR_DIR_NOT_EMPTY,
+        fs_win_error_already_exists            = ERROR_ALREADY_EXISTS,
+        fs_win_error_filename_exceeds_range    = ERROR_FILENAME_EXCED_RANGE,
+        fs_win_error_directory_name_is_invalid = ERROR_DIRECTORY,
+        fs_win_error_reparse_tag_invalid       = ERROR_REPARSE_TAG_INVALID
+
+} fs_win_errors;
 #else // _WIN32
 #define FS_CHAR char
 #define FS_PREFERRED_SEPARATOR '/'
@@ -171,10 +196,8 @@ typedef enum fs_err {
         fs_err_invalid_argument          = EINVAL,
         fs_err_name_too_long             = ENAMETOOLONG,
         fs_err_function_not_supported    = ENOSYS,
-        fs_err_loop                      = ELOOP,
-#ifdef _WIN32
-        fs_err_reparse_tag_invalid
-#endif // _WIN32
+        fs_err_loop                      = ELOOP
+
 } fs_err;
 
 typedef struct fs_space_info {
@@ -191,7 +214,7 @@ typedef struct fs_file_status {
 
 typedef struct fs_error_code {
         fs_error_type type;
-        int32_t       code;
+        uint32_t      code;
         char          *msg;
 
 } fs_error_code;
