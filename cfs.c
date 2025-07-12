@@ -411,6 +411,8 @@ char *_fs_error_string(fs_error_type type, uint32_t e)
                         return FS_SDUP("cfs windows error: filename exceeds range");
                 case fs_win_error_directory_name_is_invalid:
                         return FS_SDUP("cfs windows error: invalid directory name");
+                case fs_win_error_privilege_not_held:
+                        return FS_SDUP("cfs windows error: not enough permissions");
                 case fs_win_error_reparse_tag_invalid:
                         return FS_SDUP("cfs windows error: invalid reparse tag");
                 default:
@@ -565,7 +567,6 @@ fs_file_status _symlink_status(fs_cpath p, _fs_stat *outst, fs_error_code *ec)
                 outst = &st;
 
 #ifdef _WIN32
-        (void)outst;  // Only used on posix
         const _fs_stats_flag flags = _fs_stats_flag_Attributes | _fs_stats_flag_Reparse_tag;
         *outst                     = _win32_get_file_stat(p, flags, ec);
         return _make_status(outst, ec);
@@ -1184,7 +1185,7 @@ _fs_stat _win32_get_file_stat(fs_cpath p, _fs_stats_flag flags, fs_error_code *e
         if (FS_FLAG_SET(flags, _fs_stats_flag_Attributes)
             || FS_FLAG_SET(flags, _fs_stats_flag_Reparse_tag)) {
                 FILE_BASIC_INFO info;
-                if (GetFileInformationByHandleEx(handle, FileBasicInfo, &info, sizeof(FILE_BASIC_INFO))) {
+                if (!GetFileInformationByHandleEx(handle, FileBasicInfo, &info, sizeof(FILE_BASIC_INFO))) {
                         FS_SYSTEM_ERROR(ec, GetLastError());
                         goto defer;
                 }
@@ -1212,13 +1213,13 @@ _fs_stat _win32_get_file_stat(fs_cpath p, _fs_stats_flag flags, fs_error_code *e
                         flags &= ~_fs_stats_flag_Reparse_tag;
                 }
         }
+defer:
+        CloseHandle(handle);
+#endif // !FS_SYMLINKS_SUPPORTED
 
         if (flags != _fs_stats_flag_None)
                 FS_CFS_ERROR(ec, fs_err_function_not_supported);
 
-defer:
-        CloseHandle(handle);
-#endif // !FS_SYMLINKS_SUPPORTED
         return out;
 }
 
@@ -2813,22 +2814,7 @@ fs_file_status fs_status(fs_cpath p, fs_error_code *ec)
         }
 #endif // !NDEBUG
 
-        fs_cpath res    = p;
-        fs_bool freeRes = FS_FALSE;
-
-#ifdef _WIN32
-        // From GNU libstdc++:
-        // stat() fails if there's a trailing slash (PR 88881)
-        if (fs_path_has_relative_path(p) && _is_separator(p[wcslen(p) - 1])) {
-                res     = fs_path_parent_path(p);
-                freeRes = FS_TRUE;
-        }
-#endif // _WIN32
-
-        const fs_file_status status = _status(res, NULL, ec);
-        if (freeRes)
-                free((fs_path)res);
-
+        const fs_file_status status = _status(p, NULL, ec);
         return status;
 }
 
@@ -2843,19 +2829,7 @@ fs_file_status fs_symlink_status(fs_cpath p, fs_error_code *ec)
         }
 #endif // !NDEBUG
 
-        fs_cpath res    = p;
-        fs_bool freeRes = FS_FALSE;
-#ifdef _WIN32
-        if (fs_path_has_relative_path(p) && _is_separator(p[wcslen(p) - 1])) {
-                res     = fs_path_parent_path(p);
-                freeRes = FS_TRUE;
-        }
-#endif // _WIN32
-
-        const fs_file_status status = _symlink_status(res, NULL, ec);
-        if (freeRes)
-                free((fs_path)res);
-
+        const fs_file_status status = _symlink_status(p, NULL, ec);
         return status;
 }
 

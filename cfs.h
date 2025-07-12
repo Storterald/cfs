@@ -40,6 +40,7 @@ typedef enum fs_win_errors {
         fs_win_error_already_exists            = ERROR_ALREADY_EXISTS,
         fs_win_error_filename_exceeds_range    = ERROR_FILENAME_EXCED_RANGE,
         fs_win_error_directory_name_is_invalid = ERROR_DIRECTORY,
+        fs_win_error_privilege_not_held        = ERROR_PRIVILEGE_NOT_HELD,
         fs_win_error_reparse_tag_invalid       = ERROR_REPARSE_TAG_INVALID
 
 } fs_win_errors;

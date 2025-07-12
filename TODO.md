@@ -36,7 +36,7 @@
    - [X] fs_create_symlink
    - [X] fs_create_directory_symlink
    - [X] fs_current_path
-   - [X] fs_current_path_ch
+   - [X] fs_set_current_path
    - [X] fs_exists_s
    - [X] fs_exists
    - [X] fs_equivalent
