@@ -74,8 +74,7 @@ fs_bool fs_is_##what(fs_cpath p, fs_error_code *ec)     \
         || (__err__) == fs_win_error_file_not_found     \
         || (__err__) == fs_win_error_invalid_name)
 
-#ifdef CreateSymbolicLink
-#define FS_SYMLINKS_SUPPORTED
+#define GET_SYSTEM_ERROR() GetLastError()
 
 typedef enum _fs_path_kind {
         _fs_path_kind_Dos  = VOLUME_NAME_DOS,
@@ -160,6 +159,9 @@ typedef struct _fs_stat {
         _fs_reparse_tag reparse_point_tag;
 
 } _fs_stat;
+
+#ifdef CreateSymbolicLink
+#define FS_SYMLINKS_SUPPORTED
 
 typedef struct _fs_reparse_data_buffer {
         ULONG reparse_tag;
@@ -248,6 +250,8 @@ typedef struct _fs_generic_reparse_buffer       _fs_generic_reparse_buffer;
 
 #define FS_SYMLINKS_SUPPORTED
 
+#define GET_SYSTEM_ERROR() errno
+
 typedef struct stat _fs_stat;
 typedef DIR *_fs_dir;
 typedef struct dirent *_fs_dir_entry;
@@ -293,6 +297,7 @@ FS_FORCE_INLINE static fs_bool _is_block_file_t(fs_file_type t);
 FS_FORCE_INLINE static fs_bool _is_character_file_t(fs_file_type t);
 FS_FORCE_INLINE static fs_bool _is_directory_t(fs_file_type t);
 FS_FORCE_INLINE static fs_bool _is_fifo_t(fs_file_type t);
+FS_FORCE_INLINE static fs_bool _is_junction_t(fs_file_type t);
 FS_FORCE_INLINE static fs_bool _is_other_t(fs_file_type t);
 FS_FORCE_INLINE static fs_bool _is_regular_file_t(fs_file_type t);
 FS_FORCE_INLINE static fs_bool _is_socket_t(fs_file_type t);
@@ -745,6 +750,11 @@ fs_bool _is_directory_t(fs_file_type t)
 fs_bool _is_fifo_t(fs_file_type t)
 {
         return t == fs_file_type_fifo;
+}
+
+fs_bool _is_junction_t(fs_file_type t)
+{
+        return t == fs_file_type_junction;
 }
 
 fs_bool _is_other_t(fs_file_type t)
@@ -2578,8 +2588,7 @@ fs_path fs_read_symlink(fs_cpath p, fs_error_code *ec)
 #endif // !FS_SYMLINKS_SUPPORTED
 }
 
-fs_bool fs_remove(fs_cpath p, fs_error_code *ec)
-{
+fs_bool fs_remove(fs_cpath p, fs_error_code *ec) {
         FS_CLEAR_ERROR_CODE(ec);
 
 #ifndef NDEBUG
@@ -2589,24 +2598,28 @@ fs_bool fs_remove(fs_cpath p, fs_error_code *ec)
         }
 #endif // !NDEBUG
 
+        const fs_file_status st = fs_symlink_status(p, ec);
+        if (fs_exists_s(st)) {
+                if (fs_is_directory_s(st) || _is_junction_t(st.type)) {
 #ifdef _WIN32
-        const fs_file_status status = fs_symlink_status(p, ec);
-        if (fs_exists_s(status)) {
-                if ((status.type == fs_file_type_directory && RemoveDirectoryW(p))
-                    || DeleteFileW(p)) {
-                        return FS_TRUE;
-                }
-                FS_SYSTEM_ERROR(ec, GetLastError());
-        } else if (fs_status_known(status))
-                FS_CLEAR_ERROR_CODE(ec);
+                        if (RemoveDirectoryW(p))
+                                return FS_TRUE;
 #else // _WIN32
-        if (remove(p) == 0)
-                return FS_TRUE;
-
-        const int err = errno;
-        if (err != ENOENT)
-                FS_SYSTEM_ERROR(ec, err);
+                        if (!rmdir())
+                                return FS_TRUE;
 #endif // !_WIN32
+                } else {
+#ifdef _WIN32
+                        if (DeleteFileW(p))
+                                return FS_TRUE;
+#else // _WIN32
+                        if (!remove(p))
+                                return FS_TRUE;
+#endif // !_WIN32
+                }
+                FS_SYSTEM_ERROR(ec, GET_SYSTEM_ERROR());
+        } else if (fs_status_known(st))
+                FS_CLEAR_ERROR_CODE(ec);
 
         return FS_FALSE;
 }
@@ -2629,14 +2642,16 @@ uintmax_t fs_remove_all(fs_cpath p, fs_error_code *ec)
         uintmax_t count = 0;
         FOR_EACH_ENTRY_IN_DIR(path, it) {
                 const fs_cpath elem = FS_DEREF_RDIR_ITER(it);
-                if (fs_is_directory(path, ec)) {
+                const fs_bool isdir = fs_is_directory(path, ec);
+                if (ec->code != fs_err_success)
+                        break;
+
+                if (isdir) {
                         count += fs_remove_all(elem, ec);
                         if (ec->code != fs_err_success)
                                 break;
+                        continue;
                 }
-
-                if (ec->code != fs_err_success)
-                        break;
 
                 count += fs_remove(elem, ec);
                 if (ec->code != fs_err_success)
@@ -2644,6 +2659,7 @@ uintmax_t fs_remove_all(fs_cpath p, fs_error_code *ec)
         }
         FS_DESTROY_DIR_ITER(it);
 
+        count += fs_remove(p, ec);
         return count;
 }
 
@@ -2756,32 +2772,32 @@ fs_space_info fs_space(fs_cpath p, fs_error_code *ec)
 
 #ifdef _WIN32
         struct {
-                PULARGE_INTEGER capacity;
-                PULARGE_INTEGER free;
-                PULARGE_INTEGER available;
+                ULARGE_INTEGER capacity;
+                ULARGE_INTEGER free;
+                ULARGE_INTEGER available;
         } info;
 
         const fs_path rootPath = fs_absolute(p, ec);
         if (ec->code != fs_err_success)
                 return spaceInfo;
 
-        if (!GetVolumePathNameW(rootPath, rootPath, MAX_PATH)) {
+        wchar_t buf[MAX_PATH];
+        if (!GetVolumePathNameW(rootPath, buf, MAX_PATH)) {
                 FS_SYSTEM_ERROR(ec, GetLastError());
-                free(rootPath);
-                return spaceInfo;
+                goto defer;
         }
 
         // Get free space information
-        if (!GetDiskFreeSpaceExW(rootPath, (PULARGE_INTEGER)&info.available,
-            (PULARGE_INTEGER)&info.capacity, (PULARGE_INTEGER)&info.free)) {
+        if (!GetDiskFreeSpaceExW(buf, &info.available, &info.capacity, &info.free)) {
                 FS_SYSTEM_ERROR(ec, GetLastError());
-                free(rootPath);
-                return spaceInfo;
+                goto defer;
         }
 
-        spaceInfo.capacity  = (uintmax_t)info.capacity;
-        spaceInfo.free      = (uintmax_t)info.free;
-        spaceInfo.available = (uintmax_t)info.available;
+        spaceInfo.capacity  = info.capacity.QuadPart;
+        spaceInfo.free      = info.free.QuadPart;
+        spaceInfo.available = info.available.QuadPart;
+
+defer:
         free(rootPath);
 #else // _WIN32
         struct statvfs fs;
