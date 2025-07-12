@@ -675,10 +675,25 @@ int _get_recursive_entries(fs_cpath p, fs_cpath **buf, int *alloc, fs_bool follo
                         elems   = *buf;
                 }
 
-                const fs_cpath elem = elems[idx - 1];
-                if (fs_is_directory(elem, ec)) {
+                const fs_cpath elem     = elems[idx - 1];
+                const fs_file_status st = fs_symlink_status(elem, ec);
+                if (ec->code != fs_err_success) {
+                        *fe = FS_TRUE;
+                        break;
+                }
+
+                fs_bool recurse = fs_is_directory_s(st);
+                if (follow && fs_is_symlink_s(st)) {
+                        recurse |= fs_is_directory(elem, ec);
+                        if (ec->code != fs_err_success) {
+                                *fe = FS_TRUE;
+                                break;
+                        }
+                }
+
+                if (recurse) {
                         idx = _get_recursive_entries(elem, buf, alloc, follow, skipdenied, ec, idx, fe);
-                        if (fe && *fe)
+                        if (*fe)
                                 break;
                 }
         } while (_find_next(dir, &entry, skipdenied, ec));
@@ -3725,7 +3740,6 @@ fs_dir_iter fs_directory_iterator_opt(fs_cpath p, fs_directory_options options, 
                 return (fs_dir_iter){0};
         }
 
-        // TODO follow symlink
         const fs_bool skipdenied = FS_FLAG_SET(options, fs_directory_options_skip_permission_denied);
 
 #ifdef _WIN32
