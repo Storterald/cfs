@@ -61,18 +61,13 @@ fs_bool fs_is_##what(fs_cpath p, fs_error_code *ec)     \
 #include <windows.h>
 #include <shlobj.h> // SHCreateDirectoryExW
 
-#define UNIX_EPOCH_TO_FILETIME_EPOCH (116444736000000000ULL)
+#define UNIX_EPOCH_TO_FILETIME_EPOCH 116444736000000000ULL
 
 #define FS_PREF(s) L##s
 #define FS_MAX_PATH MAX_PATH // used outside OS specific blocks
 
 #define FS_STR(__foo__, ...) wcs##__foo__(__VA_ARGS__)
 #define FS_DUP FS_WDUP
-
-#define IS_ENOENT(__err__)                              \
-        ((__err__) == fs_win_error_path_not_found       \
-        || (__err__) == fs_win_error_file_not_found     \
-        || (__err__) == fs_win_error_invalid_name)
 
 #define IS_ERROR_EXCEED(__err__)                                \
         ((__err__) == fs_win_error_path_not_found               \
@@ -133,7 +128,7 @@ enum {
 typedef enum _fs_symbolic_link_flags {
         _fs_symbolic_link_flag_None                      = 0x0,
         _fs_symbolic_link_flag_Directory                 = 0x1,
-        _fs_symbolic_link_flag_Allow_unprivileged_create = 0x2,
+        _fs_symbolic_link_flag_Allow_unprivileged_create = 0x2
 
 } _fs_symbolic_link_flag;
 
@@ -141,7 +136,7 @@ typedef enum _fs_file_share_flags {
         _fs_file_share_flags_None   = 0,
         _fs_file_share_flags_Read   = FILE_SHARE_READ,
         _fs_file_share_flags_Write  = FILE_SHARE_WRITE,
-        _fs_file_share_flags_Delete = FILE_SHARE_DELETE,
+        _fs_file_share_flags_Delete = FILE_SHARE_DELETE
 
 } _fs_file_share_flags;
 
@@ -249,8 +244,6 @@ typedef struct _fs_generic_reparse_buffer       _fs_generic_reparse_buffer;
 
 #define FS_STR(__foo__, ...) str##__foo__(__VA_ARGS__)
 #define FS_DUP FS_SDUP
-
-#define IS_ENOENT(__err__) (__err__ == ENOENT)
 
 #define FS_SYMLINKS_SUPPORTED
 
@@ -565,8 +558,11 @@ fs_file_status _make_status(const _fs_stat *st, fs_error_code *ec)
         if (ec->type != fs_error_type_none) {
                 if (ec->type == fs_error_type_system && ec->code != fs_win_error_success) {
                         FS_CLEAR_ERROR_CODE(ec);
+                        const fs_bool enoent = ec->code == fs_win_error_path_not_found
+                                || ec->code == fs_win_error_file_not_found
+                                || ec->code == fs_win_error_invalid_name;
                         return (fs_file_status){
-                                .type  = IS_ENOENT(ec->code) ?
+                                .type  = enoent ?
                                         fs_file_type_not_found :
                                         fs_file_type_none,
                                 .perms = fs_perms_unknown
@@ -681,9 +677,7 @@ _fs_dir _find_first(fs_cpath p, _fs_dir_entry *entry, fs_bool skipdenied, fs_err
         const HANDLE handle = _win32_find_first(p, entry);
         if (handle == INVALID_HANDLE_VALUE) {
                 const DWORD err = GetLastError();
-                if (IS_ENOENT(err))
-                        FS_CFS_ERROR(ec, fs_err_no_such_file_or_directory);
-                else if (!skipdenied || err != fs_win_error_access_denied)
+                if (!skipdenied || err != fs_win_error_access_denied)
                         FS_SYSTEM_ERROR(ec, err);
 
                 return INVALID_HANDLE_VALUE;
@@ -756,9 +750,6 @@ int _get_recursive_entries(fs_cpath p, fs_cpath **buf, int *alloc, fs_bool follo
 #endif // _WIN32
 
         if (ec->code != fs_err_success) {
-                if (ec->type == fs_error_type_cfs
-                    && ec->code == fs_err_no_such_file_or_directory)
-                        FS_CLEAR_ERROR_CODE(ec);
                 *fe = FS_TRUE;
                 return 0;
         }
@@ -1468,12 +1459,7 @@ HANDLE _win32_get_handle(fs_cpath p, _fs_access_rights rights, _fs_file_flags fl
                 | _fs_file_share_flags_Delete;
         const HANDLE handle = _win32_create_file(p, rights, shareMode, NULL, OPEN_EXISTING, flags, NULL);
         if (handle == INVALID_HANDLE_VALUE) {
-                const DWORD err = GetLastError();
-                if (IS_ENOENT(err))
-                        FS_CFS_ERROR(ec, fs_err_no_such_file_or_directory);
-                else
-                        FS_SYSTEM_ERROR(ec, err);
-
+                FS_SYSTEM_ERROR(ec, GetLastError());
                 return INVALID_HANDLE_VALUE;
         }
         return handle;
@@ -2744,9 +2730,8 @@ fs_bool fs_equivalent(fs_cpath p1, fs_cpath p2, fs_error_code *ec)
         handle1 = _win32_get_handle(
                 p1, _fs_access_rights_File_read_attributes,
                 _fs_file_flags_Backup_semantics, ec);
-        if (ec->code != fs_err_success) {
+        if (ec->code != fs_err_success)
                 return FS_FALSE;
-        }
 
         BY_HANDLE_FILE_INFORMATION info1;
         if (!_win32_get_file_information_by_handle(handle1, &info1)) {
