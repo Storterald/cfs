@@ -1974,7 +1974,9 @@ fs_bool fs_create_directory_cp(fs_cpath p, fs_cpath existing_p, fs_error_code *e
 
 #ifdef _WIN32
         if (!CreateDirectoryExW(existing_p, p, NULL)) {
-                FS_SYSTEM_ERROR(ec, GetLastError());
+                const DWORD err = GetLastError();
+                if (err != fs_win_error_already_exists)
+                        FS_SYSTEM_ERROR(ec, err);
                 return FS_FALSE;
         }
         return FS_TRUE;
@@ -2431,7 +2433,7 @@ void fs_set_last_write_time(fs_cpath p, fs_file_time_type new_time, fs_error_cod
 
 #ifdef _WIN32
         const HANDLE hFile = _win32_get_handle(
-                p, _fs_access_rights_File_read_attributes,
+                p, _fs_access_rights_File_write_attributes,
                 _fs_file_flags_Normal, ec);
         if (ec->code != fs_err_success)
                 return;
