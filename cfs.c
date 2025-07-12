@@ -2010,36 +2010,54 @@ fs_bool fs_create_directories(fs_cpath p, fs_error_code *ec)
                 return FS_FALSE;
 
 #ifdef _WIN32
-        const int r = SHCreateDirectoryExW(NULL, p, NULL);
-        if (r != fs_win_error_success) {
-                FS_SYSTEM_ERROR(ec, r);
-                return FS_FALSE;
+        if (wcslen(p) < 248) {
+                fs_path norm = FS_WDUP(p);
+                fs_path_make_preferred(&norm);
+
+                const int r = SHCreateDirectoryExW(NULL, norm, NULL);
+                free(norm);
+
+                if (r != fs_win_error_success) {
+                        FS_SYSTEM_ERROR(ec, r);
+                        return FS_FALSE;
+                }
+                return FS_TRUE;
         }
-        return FS_TRUE;
-#else // _WIN32
+#endif // _WIN32
+
         fs_path_iter it  = fs_path_begin(p);
         fs_bool existing = FS_TRUE;
-        fs_path current;
+        fs_path current  = FS_DUP(FS_PREF(""));
 
-        if (fs_path_is_absolute(p)) {
+#ifdef _WIN32
+        if (fs_path_has_root_name(p)) {
+                fs_path_append_s(&current, FS_DEREF_PATH_ITER(it));
                 fs_path_iter_next(&it);
-                current = strdup("/");
-        } else {
+        }
+#endif // _WIN32
+
+        if (fs_path_has_root_directory(p)) {
+                fs_path_append_s(&current, FS_DEREF_PATH_ITER(it));
+                fs_path_iter_next(&it);
+        }
+
+        if (current[0] == FS_PREF('\0')) {
+                free(current);
                 current = fs_current_path(ec);
         }
 
         for (; *FS_DEREF_PATH_ITER(it); fs_path_iter_next(&it)) {
                 const fs_cpath elem = FS_DEREF_PATH_ITER(it);
-                if (strcmp(elem, ".") == 0)
+                if (FS_STR(cmp, elem, FS_PREF(".")) == 0)
                         continue;
-                if (strcmp(elem, "..") == 0) {
+                if (FS_STR(cmp, elem, FS_PREF("..")) == 0) {
                         fs_path tmp = current;
                         current     = fs_path_parent_path(current);
                         free(tmp);
                         continue;
                 }
 
-                _path_append_s(&current, elem, FS_TRUE);
+                fs_path_append_s(&current, elem);
 
                 _fs_stat st;
                 const fs_file_status stat = _status(current, &st, ec);
@@ -2052,18 +2070,16 @@ fs_bool fs_create_directories(fs_cpath p, fs_error_code *ec)
                                 goto defer;
                         }
                 } else {
-                        _posix_create_dir(current, fs_perms_all, ec);
+                        fs_create_directory(current, ec);
                         if (ec->code != fs_err_success)
                                 goto defer;
                 }
         }
 
-        defer:
-                free(current);
+defer:
+        free(current);
         FS_DESTROY_PATH_ITER(it);
         return FS_FALSE;
-#endif // !_WIN32
-
 }
 
 void fs_create_hard_link(fs_cpath target, fs_cpath link, fs_error_code *ec)
