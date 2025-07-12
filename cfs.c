@@ -201,6 +201,10 @@ typedef struct _fs_generic_reparse_buffer       _fs_generic_reparse_buffer;
 #include <fcntl.h>
 #include <utime.h>
 
+#if defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE >= 200809L
+#define FS_POSIX2008
+#endif // _POSIX_C_SOURCE && _POSIX_C_SOURCE >= 200809L
+
 #ifdef __APPLE__
 #if defined(MAC_OS_X_VERSION_MIN_REQUIRED) && MAC_OS_X_VERSION_MIN_REQUIRED >= 1050
 #include <copyfile.h>
@@ -209,12 +213,21 @@ typedef struct _fs_generic_reparse_buffer       _fs_generic_reparse_buffer;
 #endif // __APPLE__
 
 #ifdef __FreeBSD__
+#include <sys/param.h>
 #if __FreeBSD_version >= 1300000
 #define FS_COPY_FILE_RANGE_AVAILABLE
+#define FS_UTIMENSAT_AVAILABLE
 #endif // __FreeBSD_version >= 1300000
+#if __FreeBSD_version >= 800000
+#define FS_CHMODAT_AVAILABLE
+#endif // __FreeBSD_version >= 800000
 #endif // __FreeBSD__
 
 #ifdef __linux__
+#ifdef FS_POSIX2008
+#define FS_UTIMENSAT_AVAILABLE
+#define FS_CHMODAT_AVAILABLE
+#endif // FS_POSIX2008
 #if defined(__GLIBC__) && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 27))
 #define FS_COPY_FILE_RANGE_AVAILABLE
 #endif // __GLIBC__ && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 27))
@@ -595,7 +608,7 @@ _fs_dir _find_first(fs_cpath p, _fs_dir_entry *entry, fs_bool skipdenied, fs_err
                 return NULL;
         }
 
-        _posix_find_next(dir, entry, skipdenied, ec);
+        _find_next(dir, entry, skipdenied, ec);
         return dir;
 #endif // !_WIN32
 }
@@ -649,6 +662,11 @@ int _get_recursive_entries(fs_cpath p, fs_cpath **buf, int *alloc, fs_bool follo
 
         _fs_dir_entry entry;
         const _fs_dir dir = _find_first(sp, &entry, skipdenied, ec);
+
+#ifdef _WIN32
+        free(sp);
+#endif // _WIN32
+
         if (ec->code != fs_err_success) {
                 if (ec->type == fs_error_type_cfs
                     && ec->code == fs_err_no_such_file_or_directory)
@@ -656,10 +674,6 @@ int _get_recursive_entries(fs_cpath p, fs_cpath **buf, int *alloc, fs_bool follo
                 *fe = FS_TRUE;
                 return 0;
         }
-
-#ifdef _WIN32
-        free(sp);
-#endif // _WIN32
 
         do {
                 fs_cpath *elems = *buf;  // recursive subcalls may change *buf
@@ -2386,18 +2400,18 @@ fs_file_time_type fs_last_write_time(fs_cpath p, fs_error_code *ec)
                 .nanoseconds = (uint32_t)st.st_mtimespec.tv_nsec
         };
 #elif defined(__linux__)
-#if defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE >= 200809L
+#ifdef FS_POSIX2008
         return (fs_file_time_type){
                 .seconds     = (time_t)st.st_mtim.tv_sec,
                 .nanoseconds = (uint32_t)st.st_mtim.tv_nsec
         };
-#else // _POSIX_C_SOURCE && _POSIX_C_SOURCE >= 200809L
+#else // FS_POSIX2008
         return (fs_file_time_type){
                 .seconds     = st.st_mtime,
                 .nanoseconds = 0
         };
-#endif // !_POSIX_C_SOURCE || _POSIX_C_SOURCE < 200809L
-#endif // !__APPLE__
+#endif // !FS_POSIX2008
+#endif // __linux__
 #endif // !_WIN32
 }
 
@@ -2435,7 +2449,7 @@ void fs_set_last_write_time(fs_cpath p, fs_file_time_type new_time, fs_error_cod
 
         CloseHandle(hFile);
 #else // _WIN32
-#if defined(__linux__) && defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE >= 200809L
+#ifdef FS_UTIMENSAT_AVAILABLE
         struct timespec ts[2];
         ts[0].tv_sec  = 0;
         ts[0].tv_nsec = UTIME_OMIT;
@@ -2444,7 +2458,7 @@ void fs_set_last_write_time(fs_cpath p, fs_file_time_type new_time, fs_error_cod
 
         if (utimensat(AT_FDCWD, p, ts, 0))
                 FS_SYSTEM_ERROR(ec, errno);
-#else // __linux__ && _POSIX_C_SOURCE && _POSIX_C_SOURCE >= 200809L
+#else // FS_UTIMENSAT_AVAILABLE
         struct stat st;
         if (stat(p, &st)) {
                 FS_SYSTEM_ERROR(ec, errno);
@@ -2459,7 +2473,7 @@ void fs_set_last_write_time(fs_cpath p, fs_file_time_type new_time, fs_error_cod
 
         if (utimes(p, tv))
                 FS_SYSTEM_ERROR(ec, errno);
-#endif // !__linux__ || !_POSIX_C_SOURCE || _POSIX_C_SOURCE < 200809L
+#endif // !FS_UTIMENSAT_AVAILABLE
 #endif // !_WIN32
 }
 
@@ -2509,16 +2523,16 @@ void fs_permissions_opt(fs_cpath p, fs_perms prms, fs_perm_options opts, fs_erro
         const fs_bool readonly = (prms & _fs_perms_All_write) == fs_perms_none;
         _win32_change_file_permissions(p, !nofollow, readonly, ec);
 #else // _WIN32
-#if defined(__linux__) && defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE >= 200809L
+#ifdef FS_CHMODAT_AVAILABLE
         const int flag = (nofollow && fs_is_symlink_s(st)) ? AT_SYMLINK_NOFOLLOW : 0;
         if (fchmodat(AT_FDCWD, p, (mode_t)prms, flag))
                 FS_SYSTEM_ERROR(ec, errno);
-#else // __linux__ && _POSIX_C_SOURCE && _POSIX_C_SOURCE >= 200809L
+#else // FS_CHMODAT_AVAILABLE
         if (nofollow && fs_is_symlink_s(st))
                 FS_CFS_ERROR(ec, fs_err_function_not_supported);
         else if (chmod(p, (mode_t)prms))
                 FS_SYSTEM_ERROR(ec, errno);
-#endif // !__linux__ || !_POSIX_C_SOURCE || _POSIX_C_SOURCE < 200809L
+#endif // !FS_CHMODAT_AVAILABLE
 #endif // !_WIN32
 }
 
