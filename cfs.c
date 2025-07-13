@@ -1058,7 +1058,7 @@ static LPWSTR _win32_prepend_unc(LPCWSTR path, fs_bool separate)
         const size_t len = wcslen(abs) + 4 + separate;
         const LPWSTR unc = malloc((len + 1) * sizeof(WCHAR));
         wcscpy(unc, L"\\\\?\\");
-        wcscat(unc, path);
+        wcscat(unc, abs);
         if (separate)
                 wcscat(unc, L"\\");
 
@@ -2553,6 +2553,10 @@ fs_bool fs_create_directories(fs_cpath p, fs_error_code *ec)
                         return FS_FALSE;
 
                 fs_path_make_preferred(&norm);
+                if (wcslen(norm) >= 248) {
+                        free(norm);
+                        goto other;
+                }
 
                 const int r = _win32_sh_create_directory_ex_w(NULL, norm, NULL);
                 free(norm);
@@ -2563,6 +2567,7 @@ fs_bool fs_create_directories(fs_cpath p, fs_error_code *ec)
                 }
                 return FS_TRUE;
         }
+other:  ;
 #endif // _WIN32
 
         fs_path_iter it  = fs_path_begin(p);
