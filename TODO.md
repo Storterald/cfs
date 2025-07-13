@@ -8,12 +8,12 @@
 - [ ] Verify alloctions
 - [ ] Make api return error and return old output by parameter pointer
 - [ ] Check parameters
-- [ ] Verify minimum OS version off all API calls used (Windows, Linux, macOS, FreeBSD)
+- [X] Verify minimum OS version off all API calls used (Windows, Linux, macOS, BSD)
 - [ ] Make sure every call that returns path handles resizes (with for (;;) or similar)
 - [ ] Don't precompute all directory iterators members
 - [ ] Maybe switch to C89
 - [ ] Fix mixed styling
-- [ ] Add '\\?\' if a path is > MAX_PATH in windows (check if >10)
+- [X] Add '\\?\' if a path is > MAX_PATH in windows
 - [ ] System error enums (Windows and Posix)
 
 # Version 1.0.0-alpha
