@@ -6,57 +6,7 @@
 
 static fs_error_code _fs_internal_error = {0};
 
-#define FS_CLEAR_ERROR_CODE(ec)                 \
-do {                                            \
-        ec = ec ? ec : &_fs_internal_error;     \
-        *ec = (fs_error_code){0};               \
-} while (FS_FALSE)
-
-#define FS_CFS_ERROR(ec, e)                             \
-do {                                                    \
-        (ec)->type = fs_error_type_cfs;                 \
-        (ec)->code = e;                                 \
-        (ec)->msg = _fs_error_string((ec)->type, e);    \
-} while (FS_FALSE)
-
-#define FS_SYSTEM_ERROR(ec, e)                          \
-do {                                                    \
-        (ec)->type = fs_error_type_system;              \
-        (ec)->code = e;                                 \
-        (ec)->msg = _fs_error_string((ec)->type, e);    \
-} while (FS_FALSE)
-
-#ifndef NDEBUG
-#define FS_IS_X_FOO_DECL(what)                                  \
-fs_bool fs_is_##what(fs_cpath p, fs_error_code *ec)             \
-{                                                               \
-        FS_CLEAR_ERROR_CODE(ec);                                \
-                                                                \
-        if (!p) {                                               \
-                FS_CFS_ERROR(ec, fs_err_invalid_argument);      \
-                return FS_FALSE;                                \
-        }                                                       \
-                                                                \
-        const fs_file_status status = fs_status(p, ec);         \
-        if (ec->code != fs_err_success)                         \
-                return FS_FALSE;                                \
-                                                                \
-        return fs_is_##what##_s(status);                        \
-}
-#else // !NDEBUG
-#define FS_IS_X_FOO_DECL(what)                          \
-fs_bool fs_is_##what(fs_cpath p, fs_error_code *ec)     \
-{                                                       \
-        FS_CLEAR_ERROR_CODE(ec);                        \
-                                                        \
-        const fs_file_status status = fs_status(p, ec); \
-        if (ec->code != fs_err_success)                 \
-                return FS_FALSE;                        \
-                                                        \
-        return fs_is_##what##_s(status);                \
-}
-#endif // NDEBUG
-
+#pragma region platform_specific
 #ifdef _WIN32
 #include <windows.h>
 #include <shlobj.h> // SHCreateDirectoryExW
@@ -255,7 +205,9 @@ typedef struct dirent *_fs_dir_entry;
 #define FS_CLOSE_DIR closedir
 #define FS_DIR_ENTRY_NAME(entry) ((entry)->d_name)
 #endif // !_WIN32
+#pragma endregion platform_specific
 
+#pragma region compiler_specific
 #ifdef _MSC_VER
 #define FS_FORCE_INLINE __forceinline
 #define FS_SDUP _strdup
@@ -265,6 +217,59 @@ typedef struct dirent *_fs_dir_entry;
 #define FS_SDUP strdup
 #define FS_WDUP wcsdup
 #endif // !_MSC_VER
+#pragma endregion compiler_specific
+
+#pragma region macros
+#define FS_CLEAR_ERROR_CODE(ec)                 \
+do {                                            \
+        ec = ec ? ec : &_fs_internal_error;     \
+        *ec = (fs_error_code){0};               \
+} while (FS_FALSE)
+
+#define FS_CFS_ERROR(ec, e)                             \
+do {                                                    \
+        (ec)->type = fs_error_type_cfs;                 \
+        (ec)->code = e;                                 \
+        (ec)->msg = _fs_error_string((ec)->type, e);    \
+} while (FS_FALSE)
+
+#define FS_SYSTEM_ERROR(ec, e)                          \
+do {                                                    \
+        (ec)->type = fs_error_type_system;              \
+        (ec)->code = e;                                 \
+        (ec)->msg = _fs_error_string((ec)->type, e);    \
+} while (FS_FALSE)
+
+#ifndef NDEBUG
+#define FS_IS_X_FOO_DECL(what)                                  \
+fs_bool fs_is_##what(fs_cpath p, fs_error_code *ec)             \
+{                                                               \
+        FS_CLEAR_ERROR_CODE(ec);                                \
+                                                                \
+        if (!p) {                                               \
+                FS_CFS_ERROR(ec, fs_err_invalid_argument);      \
+                return FS_FALSE;                                \
+        }                                                       \
+                                                                \
+        const fs_file_status status = fs_status(p, ec);         \
+        if (ec->code != fs_err_success)                         \
+                return FS_FALSE;                                \
+                                                                \
+        return fs_is_##what##_s(status);                        \
+}
+#else // !NDEBUG
+#define FS_IS_X_FOO_DECL(what)                          \
+fs_bool fs_is_##what(fs_cpath p, fs_error_code *ec)     \
+{                                                       \
+        FS_CLEAR_ERROR_CODE(ec);                        \
+                                                        \
+        const fs_file_status status = fs_status(p, ec); \
+        if (ec->code != fs_err_success)                 \
+                return FS_FALSE;                        \
+                                                        \
+        return fs_is_##what##_s(status);                \
+}
+#endif // NDEBUG
 
 #define FS_FLAG_SET(flags, flag) (((flags) & (flag)) != 0)
 #define FS_DOT FS_PREF(".")
@@ -277,6 +282,13 @@ typedef struct dirent *_fs_dir_entry;
 typedef FS_CHAR *_fs_char_it;
 typedef const FS_CHAR *_fs_char_cit;
 
+#define _has_root_name(p, rtnend) ((p) != (rtnend))
+#define _has_root_dir(rtnend, rtdend) ((rtnend) != (rtdend))
+#define _has_relative_path(relative, end) ((relative) != (end))
+#define _has_filename(file, end) ((file) != (end))
+#pragma endregion macros
+
+#pragma region internal_declarations
 #pragma region cfs_utils
 static char *_fs_error_string(fs_error_type type, uint32_t e);
 FS_FORCE_INLINE static fs_path _dupe_string(fs_cpath first, fs_cpath last);
@@ -320,11 +332,6 @@ static _fs_char_cit _find_parent_path_end(fs_cpath p);
 static _fs_char_cit _find_filename(fs_cpath p, _fs_char_cit relative);
 static _fs_char_cit _find_extension(fs_cpath p, _fs_char_cit *extend);
 #pragma endregion iterators
-
-#define _has_root_name(p, rtnend) ((p) != (rtnend))
-#define _has_root_dir(rtnend, rtdend) ((rtnend) != (rtdend))
-#define _has_relative_path(relative, end) ((relative) != (end))
-#define _has_filename(file, end) ((file) != (end))
 
 #ifdef _WIN32
 #pragma region win32_str_manip
@@ -404,7 +411,9 @@ fs_bool _linux_sendfile(int in, int out, size_t len, fs_error_code *ec);
 #else // _WIN32
 #define _relative_path_contains_root_name(...) FS_FALSE
 #endif // !_WIN32
+#pragma endregion internal_declarations
 
+#pragma region internal_definitions
 #pragma region cfs_utils
 
 char *_fs_error_string(fs_error_type type, uint32_t e)
@@ -1470,10 +1479,10 @@ DWORD _win32_get_temp_path(DWORD len, LPWSTR buf)
 
 HANDLE _win32_get_handle(fs_cpath p, _fs_access_rights rights, _fs_file_flags flags, fs_error_code *ec)
 {
-        const _fs_file_share_flags shareMode = _fs_file_share_flags_Read
+        const _fs_file_share_flags share = _fs_file_share_flags_Read
                 | _fs_file_share_flags_Write
                 | _fs_file_share_flags_Delete;
-        const HANDLE handle = _win32_create_file(p, rights, shareMode, NULL, OPEN_EXISTING, flags, NULL);
+        const HANDLE handle = _win32_create_file(p, rights, share, NULL, OPEN_EXISTING, flags, NULL);
         if (handle == INVALID_HANDLE_VALUE) {
                 FS_SYSTEM_ERROR(ec, GetLastError());
                 return INVALID_HANDLE_VALUE;
@@ -1919,6 +1928,7 @@ fs_bool _linux_sendfile(int in, int out, size_t len, fs_error_code *ec) {
 }
 #endif // FS_LINUX_SENDFILE_AVAILABLE
 #endif // !_WIN32
+#pragma endregion internal_definitions
 
 #pragma region fs
 
@@ -1999,13 +2009,13 @@ fs_path fs_canonical(fs_cpath p, fs_error_code *ec)
         }
 
 #ifdef _WIN32
-        _fs_path_kind nameKind;
-        const fs_path finalp = _win32_get_final_path(p, &nameKind, ec);
+        _fs_path_kind kind;
+        const fs_path finalp = _win32_get_final_path(p, &kind, ec);
         if (ec->code != fs_err_success)
                 return NULL;
 
         const _fs_char_it buf = finalp;
-        if (nameKind == _fs_path_kind_Dos) {
+        if (kind == _fs_path_kind_Dos) {
                 wchar_t *output = buf;
 
                 if (_win32_is_drive_prefix_with_slash_slash_question(buf)) {
@@ -2021,11 +2031,11 @@ fs_path fs_canonical(fs_cpath p, fs_error_code *ec)
                 return output;
         }
 
-        const wchar_t ntPref[] = L"\\\\?\\GLOBALROOT";
-        const size_t extraLen = sizeof(ntPref) / sizeof(wchar_t);
+        const wchar_t pref[] = L"\\\\?\\GLOBALROOT";
+        const size_t len = sizeof(pref) / sizeof(wchar_t);
 
-        wchar_t *out = malloc((extraLen + wcslen(buf)) * sizeof(wchar_t));
-        memcpy(out, ntPref, sizeof(ntPref));
+        wchar_t *out = malloc((len + wcslen(buf)) * sizeof(wchar_t));
+        memcpy(out, pref, sizeof(pref));
         wcscat(out, buf);
 
         free(finalp);
@@ -2830,21 +2840,22 @@ uintmax_t fs_file_size(fs_cpath p, fs_error_code *ec)
         }
 
 #ifdef _WIN32
-        const HANDLE hFile = _win32_get_handle(
+        const HANDLE handle = _win32_get_handle(
                 p, _fs_access_rights_File_read_attributes,
                 _fs_file_flags_Normal, ec);
         if (ec->code != fs_err_success)
                 return (uintmax_t)-1;
 
-        LARGE_INTEGER fileSize;
-        if (!_win32_get_file_size_ex(hFile, &fileSize)) {
+        LARGE_INTEGER size;
+        const BOOL ret = _win32_get_file_size_ex(handle, &size);
+
+        _win32_close_handle(handle);
+        if (!ret) {
                 FS_SYSTEM_ERROR(ec, GetLastError());
-                _win32_close_handle(hFile);
                 return (uintmax_t)-1;
         }
 
-        _win32_close_handle(hFile);
-        return (uintmax_t)fileSize.QuadPart;
+        return (uintmax_t)size.QuadPart;
 #else // _WIN32
         struct stat status;
         int err = stat(p, &status);
@@ -2868,20 +2879,22 @@ uintmax_t fs_hard_link_count(fs_cpath p, fs_error_code *ec)
 #endif // !NDEBUG
 
 #ifdef _WIN32
-        const HANDLE hFile = _win32_get_handle(
+        const HANDLE handle = _win32_get_handle(
                 p, _fs_access_rights_File_read_attributes,
                 _fs_file_flags_Normal, ec);
         if (ec->code != fs_err_success)
                 return (uintmax_t)-1;
 
-        BY_HANDLE_FILE_INFORMATION fInfo;
-        if (!_win32_get_file_information_by_handle(hFile, &fInfo)) {
+        BY_HANDLE_FILE_INFORMATION info;
+        const BOOL ret = _win32_get_file_information_by_handle(handle, &info);
+
+        _win32_close_handle(handle);
+        if (!ret) {
                 FS_SYSTEM_ERROR(ec, GetLastError());
-                _win32_close_handle(hFile);
                 return (uintmax_t)-1;
         }
 
-        return fInfo.nNumberOfLinks - 1;
+        return info.nNumberOfLinks - 1;
 #else // _WIN32
         struct stat st;
         if (stat(p, &st) != 0) {
@@ -2905,15 +2918,16 @@ fs_file_time_type fs_last_write_time(fs_cpath p, fs_error_code *ec)
 #endif // !NDEBUG
 
 #ifdef _WIN32
-        const HANDLE hFile = _win32_get_handle(
+        const HANDLE handle = _win32_get_handle(
                 p, _fs_access_rights_File_read_attributes,
                 _fs_file_flags_Normal, ec);
         if (ec->code != fs_err_success)
                 return (fs_file_time_type){0};
 
         FILETIME ft;
-        const BOOL ret = _win32_get_file_time(hFile, NULL, NULL, &ft);
-        _win32_close_handle(hFile);
+        const BOOL ret = _win32_get_file_time(handle, NULL, NULL, &ft);
+
+        _win32_close_handle(handle);
         if (!ret) {
                 FS_SYSTEM_ERROR(ec, GetLastError());
                 return (fs_file_time_type){0};
@@ -2974,7 +2988,7 @@ void fs_set_last_write_time(fs_cpath p, fs_file_time_type new_time, fs_error_cod
 #endif // !NDEBUG
 
 #ifdef _WIN32
-        const HANDLE hFile = _win32_get_handle(
+        const HANDLE handle = _win32_get_handle(
                 p, _fs_access_rights_File_write_attributes,
                 _fs_file_flags_Normal, ec);
         if (ec->code != fs_err_success)
@@ -2989,10 +3003,10 @@ void fs_set_last_write_time(fs_cpath p, fs_file_time_type new_time, fs_error_cod
                 .dwHighDateTime = (DWORD)(time >> 32)
         };
 
-        if (!_win32_set_file_time(hFile, NULL, NULL, &lastWriteTime))
+        if (!_win32_set_file_time(handle, NULL, NULL, &lastWriteTime))
                 FS_SYSTEM_ERROR(ec, GetLastError());
 
-        _win32_close_handle(hFile);
+        _win32_close_handle(handle);
 #else // _WIN32
 #ifdef FS_UTIMENSAT_AVAILABLE
         struct timespec ts[2];
@@ -3239,17 +3253,15 @@ void fs_resize_file(fs_cpath p, uintmax_t size, fs_error_code *ec)
         }
 
 #ifdef _WIN32
-        const HANDLE hFile = _win32_get_handle(
+        const HANDLE handle = _win32_get_handle(
                 p, _fs_access_rights_File_generic_write,
                 _fs_file_flags_Normal, ec);
         if (ec->code != fs_err_success)
                 return;
 
-        LARGE_INTEGER liDistanceToMove = {0};
-        liDistanceToMove.QuadPart = (LONGLONG)size;
-
+        const LARGE_INTEGER off = { .QuadPart = (LONGLONG)size };
         if (fs_file_size(p, ec) > size) {
-                if (!_win32_set_file_pointer_ex(hFile, liDistanceToMove, NULL, FILE_BEGIN)) {
+                if (!_win32_set_file_pointer_ex(handle, off, NULL, FILE_BEGIN)) {
                         FS_SYSTEM_ERROR(ec, GetLastError());
                         goto defer;
                 }
@@ -3257,26 +3269,24 @@ void fs_resize_file(fs_cpath p, uintmax_t size, fs_error_code *ec)
                 if (ec->code != fs_err_success)
                         goto defer;
 
-                LARGE_INTEGER zero_pos;
-                zero_pos.QuadPart = (LONGLONG)size - 1;
-
-                if (_win32_set_file_pointer_ex(hFile, zero_pos, NULL, FILE_BEGIN) == 0) {
+                const LARGE_INTEGER end = { .QuadPart = (LONGLONG)size - 1 };
+                if (_win32_set_file_pointer_ex(handle, end, NULL, FILE_BEGIN) == 0) {
                         FS_SYSTEM_ERROR(ec, GetLastError());
                         goto defer;
                 }
 
                 const BYTE zero = 0;
-                if (!_win32_write_file(hFile, &zero, 1, NULL, NULL)) {
+                if (!_win32_write_file(handle, &zero, 1, NULL, NULL)) {
                         FS_SYSTEM_ERROR(ec, GetLastError());
                         goto defer;
                 }
         }
 
-        if (!_win32_set_end_of_file(hFile))
+        if (!_win32_set_end_of_file(handle))
                 FS_SYSTEM_ERROR(ec, GetLastError());
 
 defer:
-        _win32_close_handle(hFile);
+        _win32_close_handle(handle);
 #else // _WIN32
         if (size > (uintmax_t)FS_OFF_MAX)
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
@@ -3289,7 +3299,7 @@ fs_space_info fs_space(fs_cpath p, fs_error_code *ec)
 {
         FS_CLEAR_ERROR_CODE(ec);
 
-        fs_space_info spaceInfo = {
+        fs_space_info si = {
                 .capacity  = UINTMAX_MAX,
                 .free      = UINTMAX_MAX,
                 .available = UINTMAX_MAX
@@ -3298,7 +3308,7 @@ fs_space_info fs_space(fs_cpath p, fs_error_code *ec)
 #ifndef NDEBUG
         if (!p) {
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
-                return spaceInfo;
+                return si;
         }
 #endif // !NDEBUG
 
@@ -3309,48 +3319,41 @@ fs_space_info fs_space(fs_cpath p, fs_error_code *ec)
                 ULARGE_INTEGER available;
         } info;
 
-        const fs_path rootPath = fs_absolute(p, ec);
-        if (ec->code != fs_err_success)
-                return spaceInfo;
-
         wchar_t buf[MAX_PATH];
-        if (!_win32_get_volume_path_name(rootPath, buf, MAX_PATH)) {
+        if (!_win32_get_volume_path_name(p, buf, MAX_PATH)) {
                 FS_SYSTEM_ERROR(ec, GetLastError());
-                goto defer;
+                return si;
         }
 
         // Get free space information
         if (!_win32_get_disk_free_space_ex(buf, &info.available, &info.capacity, &info.free)) {
                 FS_SYSTEM_ERROR(ec, GetLastError());
-                goto defer;
+                return si;
         }
 
-        spaceInfo.capacity  = info.capacity.QuadPart;
-        spaceInfo.free      = info.free.QuadPart;
-        spaceInfo.available = info.available.QuadPart;
-
-defer:
-        free(rootPath);
+        si.capacity  = info.capacity.QuadPart;
+        si.free      = info.free.QuadPart;
+        si.available = info.available.QuadPart;
 #else // _WIN32
         struct statvfs fs;
         if (statvfs(p, &fs)) {
                 FS_SYSTEM_ERROR(ec, errno);
-                return spaceInfo;
+                return si;
         }
 
         if (fs.f_frsize != (unsigned long)-1) {
                 const uintmax_t fragment_size = fs.f_frsize;
                 const fsblkcnt_t unknown      = -1;
                 if (fs.f_blocks != unknown)
-                        spaceInfo.capacity  = fs.f_blocks * fragment_size;
+                        si.capacity  = fs.f_blocks * fragment_size;
                 if (fs.f_bfree != unknown)
-                        spaceInfo.free      = fs.f_bfree * fragment_size;
+                        si.free      = fs.f_bfree * fragment_size;
                 if (fs.f_bavail != unknown)
-                        spaceInfo.available = fs.f_bavail * fragment_size;
+                        si.available = fs.f_bavail * fragment_size;
         }
 #endif // !_WIN32
 
-        return spaceInfo;
+        return si;
 }
 
 fs_file_status fs_status(fs_cpath p, fs_error_code *ec)
@@ -4069,7 +4072,7 @@ fs_path_iter fs_path_end(fs_cpath p)
 
 #pragma endregion fs_path
 
-#pragma region iterators
+#pragma region fs_iters
 
 void fs_path_iter_next(fs_path_iter *it)
 {
@@ -4301,4 +4304,4 @@ fs_recursive_dir_iter fs_recursive_directory_iterator_opt(fs_cpath p, fs_directo
         };
 }
 
-#pragma endregion iterators
+#pragma endregion fs_iters

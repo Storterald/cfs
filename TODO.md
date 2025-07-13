@@ -1,20 +1,17 @@
 # Version 1.1.0-alpha
 
-- [ ] Optimize functions avoiding multiple equal parsing calls
-- [ ] Tests with GoogleTest
-- [ ] GitHub actions for Windows, Linux and macOS
-- [ ] Extra utilities
-   - [ ] Directory iterators to string
-- [ ] Verify alloctions
-- [ ] Make api return error and return old output by parameter pointer
-- [ ] Check parameters
-- [X] Verify minimum OS version off all API calls used (Windows, Linux, macOS, BSD)
-- [ ] Make sure every call that returns path handles resizes (with for (;;) or similar)
-- [ ] Don't precompute all directory iterators members
-- [ ] Maybe switch to C89
-- [ ] Fix mixed styling
-- [X] Add '\\?\' if a path is > MAX_PATH in windows
-- [ ] System error enums (Windows and Posix)
+ - [ ] Optimize functions avoiding multiple equal parsing calls
+ - [ ] Tests with GoogleTest
+ - [ ] GitHub actions for Windows, Linux and macOS
+ - [ ] Verify alloctions
+ - [ ] Make api return error and return old output by parameter pointer
+ - [ ] Check parameters
+ - [X] Verify minimum OS version off all API calls used (Windows, Linux, macOS, BSD)
+ - [X] Make sure every call that returns path handles resizes (with for (;;) or similar)
+ - [ ] Don't precompute all directory iterators members
+ - [X] Fix mixed styling
+ - [X] Add '\\?\' if a path is > MAX_PATH in windows
+ - [ ] System error enums (Windows and Posix)
 
 # Version 1.0.0-alpha
 
