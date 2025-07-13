@@ -347,9 +347,6 @@ fs_bool fs_status_known(fs_file_status s);
 
 fs_path fs_path_append(fs_cpath p, fs_cpath other);
 
-fs_path _fs_path_appendv(int c, ...);
-#define fs_path_append_v(...) _fs_path_appendv(sizeof((fs_cpath []){__VA_ARGS__}) / sizeof(fs_path), __VA_ARGS__)
-
 void fs_path_append_s(fs_path *pp, fs_cpath other);
 
 fs_path fs_path_concat(fs_cpath p, fs_cpath other);

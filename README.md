@@ -12,4 +12,8 @@ An implementation of `std::filesystem` in `C99`.
 
 ## Differences with std::filesystem
 
+`std::filesystem` implementation across compilers is extremely inconsistent. This
+library adopts the most **common** or **logical** way across various implementation,
+or a **custom** one.
+
 In `Windows`, paths above `MAX_PATH` *(260 chars)* length are supported. 

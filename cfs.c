@@ -1953,7 +1953,7 @@ fs_path fs_absolute(fs_cpath p, fs_error_code *ec)
 
 #ifdef _WIN32
         if (_is_separator(*p)) {
-                // From libstdc++:
+                // From GNU libstdc++:
                 // GetFullPathNameW("//") gives unwanted result (PR 88884).
                 // If there are multiple directory separators at the start,
                 // skip all but the last of them.
@@ -2140,21 +2140,34 @@ fs_path fs_relative(fs_cpath p, fs_cpath base, fs_error_code *ec)
         }
 #endif // !NDEBUG
 
-        const fs_path cpath = fs_weakly_canonical(p, ec);
-        if (ec->code != fs_err_success)
-                return NULL;
+        fs_path cpath = NULL;
+        fs_path cbase = NULL;
+        fs_path ret   = NULL;
 
-        const fs_path cbase = fs_weakly_canonical(base, ec);
-        if (ec->code != fs_err_success) {
-                free(cpath);
-                return NULL;
+        cpath = fs_weakly_canonical(p, ec);
+        if (ec->code != fs_err_success)
+                goto defer;
+
+        if (base[0] != '\0') {
+                cbase = fs_weakly_canonical(base, ec);
+        } else {
+                const fs_path cur = fs_current_path(ec);
+                if (ec->code != fs_err_success)
+                        goto defer;
+                cbase = fs_weakly_canonical(cur, ec);
+                free(cur);
         }
 
-        const fs_path rel = fs_path_lexically_relative(cpath, cbase);
+        if (ec->code != fs_err_success)
+                goto defer;
 
+
+        ret = fs_path_lexically_relative(cpath, cbase);
+
+defer:
         free(cpath);
         free(cbase);
-        return rel;
+        return ret;
 }
 
 fs_path fs_proximate(fs_cpath p, fs_cpath base, fs_error_code *ec)
@@ -2535,7 +2548,10 @@ fs_bool fs_create_directories(fs_cpath p, fs_error_code *ec)
 
 #ifdef _WIN32
         if (wcslen(p) < 248) {
-                fs_path norm = FS_WDUP(p);
+                fs_path norm = fs_absolute(p, ec);
+                if (ec->code != fs_err_success)
+                        return FS_FALSE;
+
                 fs_path_make_preferred(&norm);
 
                 const int r = _win32_sh_create_directory_ex_w(NULL, norm, NULL);
@@ -3537,22 +3553,6 @@ fs_path fs_path_append(fs_cpath p, fs_cpath other)
 
         fs_path out = FS_DUP(p);
         fs_path_append_s(&out, other);
-        return out;
-}
-
-fs_path _fs_path_appendv(int c, ...)
-{
-        va_list l;
-        va_start(l, c);
-
-        fs_path out = FS_DUP(va_arg(l, fs_cpath));
-        if (c == 1)
-                return out;
-
-        for (int i = 1; i < c; ++i)
-                fs_path_append_s(&out, va_arg(l, fs_cpath));
-
-        va_end(l);
         return out;
 }
 
