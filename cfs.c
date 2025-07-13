@@ -266,11 +266,16 @@ typedef struct dirent *_fs_dir_entry;
 #define FS_WDUP wcsdup
 #endif // !_MSC_VER
 
-#define FS_STACK_PATH_DECLARATION(name) FS_CHAR name[FS_MAX_PATH] = FS_PREF("")
+#define FS_FLAG_SET(flags, flag) (((flags) & (flag)) != 0)
+#define FS_DOT FS_PREF(".")
+#define FS_DOT_DOT FS_PREF("..")
+#define FS_EMPTY FS_PREF("")
+#define FS_IS_DOT(str) (FS_STR(cmp, str, FS_DOT) == 0)
+#define FS_IS_DOT_DOT(str) (FS_STR(cmp, str, FS_DOT_DOT) == 0)
+
+#define FS_STACK_PATH_DECLARATION(name) FS_CHAR name[FS_MAX_PATH] = FS_EMPTY
 typedef FS_CHAR *_fs_char_it;
 typedef const FS_CHAR *_fs_char_cit;
-
-#define FS_FLAG_SET(flags, flag) (((flags) & (flag)) != 0)
 
 #pragma region cfs_utils
 static char *_fs_error_string(fs_error_type type, uint32_t e);
@@ -290,6 +295,7 @@ static fs_file_status _symlink_status(fs_cpath p, _fs_stat *outst, fs_error_code
 static _fs_dir _find_first(fs_cpath p, _fs_dir_entry *entry, fs_bool skipdenied, fs_error_code *ec);
 static fs_bool _find_next(_fs_dir dir, _fs_dir_entry *entry, fs_bool skipdenied, fs_error_code *ec);
 static int _get_recursive_entries(fs_cpath p, fs_cpath **buf, int *alloc, fs_bool follow, fs_bool skipdenied, fs_error_code *ec, int idx, fs_bool *fe);
+FS_FORCE_INLINE static void _make_preferred(fs_path p, size_t len);
 #pragma endregion utils
 
 #pragma region type_check
@@ -311,12 +317,14 @@ static _fs_char_cit _find_root_name_end(fs_cpath p);
 static _fs_char_cit _find_root_directory_end(_fs_char_cit rtnend);
 static _fs_char_cit _find_relative_path(fs_cpath p);
 static _fs_char_cit _find_parent_path_end(fs_cpath p);
-static _fs_char_cit _find_filename(fs_cpath p);
+static _fs_char_cit _find_filename(fs_cpath p, _fs_char_cit relative);
 static _fs_char_cit _find_extension(fs_cpath p, _fs_char_cit *extend);
 #pragma endregion iterators
 
-#define _has_root_name(p, rtnend) (p != rtnend)
-#define _has_root_dir(rtnend, rtdend) (rtnend != rtdend)
+#define _has_root_name(p, rtnend) ((p) != (rtnend))
+#define _has_root_dir(rtnend, rtdend) ((rtnend) != (rtdend))
+#define _has_relative_path(relative, end) ((relative) != (end))
+#define _has_filename(file, end) ((file) != (end))
 
 #ifdef _WIN32
 #pragma region win32_str_manip
@@ -491,7 +499,7 @@ char *_fs_error_string(fs_error_type type, uint32_t e)
 fs_path _dupe_string(fs_cpath first, fs_cpath last)
 {
         if (first == last)
-                return FS_DUP(FS_PREF(""));
+                return FS_DUP(FS_EMPTY);
 
         const size_t len  = last - first;
         const size_t size = (len + 1) * sizeof(FS_CHAR);
@@ -755,12 +763,12 @@ int _get_recursive_entries(fs_cpath p, fs_cpath **buf, int *alloc, fs_bool follo
         }
 
         do {
-                fs_cpath *elems = *buf;  // recursive subcalls may change *buf
-                if (FS_STR(cmp, FS_DIR_ENTRY_NAME(entry), FS_PREF(".")) == 0
-                    || FS_STR(cmp, FS_DIR_ENTRY_NAME(entry), FS_PREF("..")) == 0)
+                fs_cpath *elems     = *buf;  // recursive subcalls may change *buf
+                const fs_cpath name = FS_DIR_ENTRY_NAME(entry);
+                if (FS_IS_DOT(name) || FS_IS_DOT_DOT(name))
                         continue;
 
-                elems[idx++] = fs_path_append(p, FS_DIR_ENTRY_NAME(entry));
+                elems[idx++] = fs_path_append(p, name);
 
                 if (idx == *alloc) {
                         *alloc *= 2;
@@ -798,6 +806,15 @@ int _get_recursive_entries(fs_cpath p, fs_cpath **buf, int *alloc, fs_bool follo
         }
 
         return idx;
+}
+
+void _make_preferred(fs_path p, size_t len)
+{
+#ifdef _WIN32
+        for (size_t i = 0; i < len; ++i)
+                if (p[i] == L'/')
+                        p[i] = FS_PREFERRED_SEPARATOR;
+#endif // _WIN32
 }
 
 #pragma endregion utils
@@ -936,12 +953,13 @@ _fs_char_cit _find_parent_path_end(fs_cpath p)
         return last;
 }
 
-_fs_char_cit _find_filename(fs_cpath p)
+_fs_char_cit _find_filename(fs_cpath p, _fs_char_cit relative)
 {
-        const _fs_char_cit it = _find_relative_path(p);
+        if (!relative)
+                relative = _find_relative_path(p);
         _fs_char_cit last     = p + FS_STR(len, p);
 
-        while (it != last && !_is_separator(last[-1]))
+        while (relative != last && !_is_separator(last[-1]))
                 --last;
 
         return last;
@@ -951,7 +969,7 @@ _fs_char_cit _find_extension(fs_cpath p, _fs_char_cit *extend)
 {
         const size_t len = FS_STR(len, p);
 #ifdef _WIN32
-        _fs_char_cit end = wcschr(_find_filename(p), L':');
+        _fs_char_cit end = wcschr(_find_filename(p, NULL), L':');
         end = end ? end : p + len;
 #else // _WIN32
         const _fs_char_cit end = p + len;
@@ -1035,9 +1053,7 @@ static LPWSTR _win32_prepend_unc(LPCWSTR path, fs_bool separate)
         if (separate)
                 wcscat(unc, L"\\");
 
-        for (size_t i = 0; i < len; ++i)
-                if (unc[i] == L'/')
-                        unc[i] = L'\\';
+        _make_preferred(unc, len);
 
         free(abs);
         return unc;
@@ -1278,7 +1294,7 @@ BOOL _win32_create_hard_link(LPCWSTR link, LPCWSTR target, LPSECURITY_ATTRIBUTES
 #ifdef FS_SYMLINKS_SUPPORTED
 BOOLEAN _win32_create_symbolic_link(LPCWSTR link, LPCWSTR target, DWORD flags)
 {
-        BOOL ret        = CreateSymbolicLinkW(link, target, flags);
+        BOOLEAN ret     = CreateSymbolicLinkW(link, target, flags);
         const DWORD err = GetLastError();
         if (ret || !IS_ERROR_EXCEED(err))
                 return ret;
@@ -1919,7 +1935,7 @@ fs_path fs_absolute(fs_cpath p, fs_error_code *ec)
 
         if (p[0] == '\0') {
                 FS_CFS_ERROR(ec, fs_err_invalid_argument);
-                return FS_DUP(FS_PREF(""));
+                return FS_DUP(FS_EMPTY);
         }
 
         if (fs_path_is_absolute(p))
@@ -2052,7 +2068,7 @@ fs_path fs_weakly_canonical(fs_cpath p, fs_error_code *ec)
                 return fs_canonical(p, ec);
         }
 
-        fs_path result = FS_DUP(FS_PREF(""));
+        fs_path result = FS_DUP(FS_EMPTY);
         fs_path tmp    = NULL; // not used outside while loop
 
         fs_path_iter iter = fs_path_begin(p);
@@ -2525,7 +2541,7 @@ fs_bool fs_create_directories(fs_cpath p, fs_error_code *ec)
 
         fs_path_iter it  = fs_path_begin(p);
         fs_bool existing = FS_TRUE;
-        fs_path current  = FS_DUP(FS_PREF(""));
+        fs_path current  = FS_DUP(FS_EMPTY);
         fs_bool out      = FS_FALSE;
 
 #ifdef _WIN32
@@ -2547,9 +2563,9 @@ fs_bool fs_create_directories(fs_cpath p, fs_error_code *ec)
 
         for (; *FS_DEREF_PATH_ITER(it); fs_path_iter_next(&it)) {
                 const fs_cpath elem = FS_DEREF_PATH_ITER(it);
-                if (FS_STR(cmp, elem, FS_PREF(".")) == 0)
+                if (FS_IS_DOT(elem))
                         continue;
-                if (FS_STR(cmp, elem, FS_PREF("..")) == 0) {
+                if (FS_IS_DOT_DOT(elem)) {
                         fs_path tmp = current;
                         current     = fs_path_parent_path(current);
                         free(tmp);
@@ -3645,11 +3661,7 @@ void fs_path_make_preferred(fs_path *pp)
 #endif // !NDEBUG
 
 #ifdef _WIN32
-        const fs_path p = *pp;
-        for (uint32_t i = 0; i < wcslen(p); ++i) {
-                if (p[i] == L'/')
-                        p[i] = FS_PREFERRED_SEPARATOR;
-        }
+        _make_preferred(*pp, wcslen(*pp));
 #endif // _WIN32
 }
 
@@ -3661,7 +3673,7 @@ void fs_path_remove_filename(fs_path *pp)
 #endif // !NDEBUG
         
         const fs_path p        = *pp;
-        const _fs_char_it file = (_fs_char_it)_find_filename(p);
+        const _fs_char_it file = (_fs_char_it)_find_filename(p, NULL);
         *file                  = '\0';
 }
 
@@ -3754,143 +3766,64 @@ fs_path fs_path_lexically_normal(fs_cpath p)
                 return NULL;
 #endif // !NDEBUG
 
-        const FS_CHAR empty[1]  = FS_PREF("");
-        const FS_CHAR dot[2]    = FS_PREF(".");
-        const FS_CHAR dotDot[3] = FS_PREF("..");
-
-        // 1. If the path is empty, stop (normal form of an empty path is an empty path).
         if (p[0] == FS_PREF('\0'))
-                return FS_DUP(FS_PREF(""));
+                return FS_DUP(FS_EMPTY);
 
-        const size_t plen         = FS_STR(len, p);
-        const _fs_char_cit last   = p + plen;
+        fs_path_iter it = fs_path_begin(p);
+        fs_path mem     = NULL;
+        fs_path out     = FS_DUP(FS_EMPTY);
+
+#ifdef _WIN32
         const _fs_char_cit rtnend = _find_root_name_end(p);
-        const size_t rtlen        = rtnend - p;
-
-        const fs_path norm = malloc((plen + 1) * sizeof(FS_CHAR));
-        memcpy(norm, p, rtlen * sizeof(FS_CHAR));
-        norm[rtlen] = '\0';
-
-        // 2. Replace each directory-separator (which may consist of multiple
-        // slashes) with a single FS_PREFERRED_SEPARATOR.
-        for (size_t i = 0; i < rtlen; ++i) { // replace
-#ifdef _WIN32
-                if (norm[i] == L'/')
-                        norm[i] = FS_PREFERRED_SEPARATOR;
+        const _fs_char_cit rtdend = _find_root_directory_end(rtnend);
+        const int skip = _has_root_name(p, rtnend) + _has_root_dir(rtnend, rtdend);
+        for (int i = 0; i < skip; ++i) {
+                fs_path elem = FS_DEREF_PATH_ITER(it);
+                fs_path_make_preferred(&elem);
+                fs_path_append_s(&out, elem);
+                fs_path_iter_next(&it);
+        }
 #endif // _WIN32
-        }
 
-        uint32_t sepcount = 0; // saved for later
-        for (uint32_t i = 0; p[i] != FS_PREF('\0'); i++)
-                sepcount += _is_separator(p[i]);
-
-        if (!sepcount)
-                return FS_DUP(p);
-
-        typedef struct {
-                _fs_char_cit it;
-                uint32_t count;
-
-        } fs_view;
-
-        // 3. Replace each slash character in the root-name with FS_PREFERRED_SEPARATOR.
-        fs_view *const vec = calloc(sepcount * 2, sizeof(fs_view));
-        uint32_t vecIdx = 0; // can be used as a size if vec[vecIdx++] is used.
-
-        fs_bool hasrtdir = FS_FALSE; // true: there is a slash right after root-name.
-        _fs_char_cit ptr = rtnend;
-
-#ifdef _WIN32
-        if (ptr != last && _is_separator(*ptr)) {
-                hasrtdir = FS_TRUE;
-                FS_STR(cat, norm, FS_PREFERRED_SEPARATOR_S);
-
-                ++ptr;
-                while (ptr != last && _is_separator(*ptr))
-                        ++ptr;
-        }
-#endif
-
-        // Split the path in strings and empty strings (for separators)
-        while (ptr != last) {
-                if (_is_separator(*ptr)) {
-                        if (vecIdx == 0 || vec[vecIdx].count == 0)
-                                vec[vecIdx++] = (fs_view){ empty, 0 };
-
-                        ++ptr;
-                        continue;
-                }
-
-                _fs_char_cit fileEnd = ptr + 1;
-                while (*fileEnd && !_is_separator(*fileEnd))
-                        ++fileEnd;
-
-                vec[vecIdx++] = (fs_view){ ptr, (uint32_t)(fileEnd - ptr) };
-                ptr = fileEnd;
-        }
-
-        // 4. Remove each dot and any immediately following directory-separator.
-        // 5. Remove each non-dot-dot filename immediately followed by a
-        // directory-separator and a dot-dot, along with any immediately following
-        // directory-separator.
-        // 6.If there is root-directory, remove all dot-dots and any
-        // directory-separators immediately following them.
-        fs_view *newEnd = vec;
-        fs_view *vecEnd = vec + vecIdx;
-        for (const fs_view *pos = vec; pos != vecEnd;) {
-                const fs_view elem = *pos++;
-                if (FS_STR(ncmp, elem.it, dot, 1) == 0) {
-                        if (pos == vecEnd)
-                                break;
-                } else if (FS_STR(ncmp, elem.it, dotDot, 2) != 0) {
-                        *newEnd++ = elem;
-                        if (pos == vecEnd)
-                                break;
-
-                        ++newEnd;
-                } else {
-                        if (newEnd != vec && FS_STR(ncmp, newEnd[-2].it, dotDot, 2) != 0) {
-                                newEnd -= 2;
-                                if (pos == vecEnd)
-                                        break;
-                        } else if (!hasrtdir) {
-                                *newEnd++ = (fs_view){ dotDot, 2 };
-                                if (pos == vecEnd)
-                                        break;
-
-                                ++newEnd;
-                        } else if (pos == vecEnd) {
-                                break;
+        FOR_EACH_PATH_ITER(it) {
+                const fs_cpath elem = FS_DEREF_PATH_ITER(it);
+                if (FS_IS_DOT_DOT(elem)) {
+                        const _fs_char_cit nend = _find_root_name_end(out);
+                        const _fs_char_cit rel  = _find_relative_path(out);
+                        const _fs_char_cit name = _find_filename(out, rel);
+                        const size_t len        = FS_STR(len, p);
+                        const _fs_char_cit last = out + len;
+                        if (_has_filename(name, last)) {
+                                if (!FS_IS_DOT_DOT(name))
+                                        fs_path_remove_filename(&out);
+                                else
+                                        fs_path_append_s(&out, elem);
+                        } else if (_has_relative_path(rel, last)) {
+                                if (!_has_root_dir(nend, rel))
+                                        fs_path_append_s(&out, elem);
+                        } else {
+                                if (fs_path_has_filename(mem) && !FS_IS_DOT_DOT(mem)) {
+                                        const fs_path tmp = out;
+                                        out = fs_path_parent_path(out);
+                                        free(tmp);
+                                        fs_path_remove_filename(&out);
+                                } else {
+                                        fs_path_append_s(&out, elem);
+                                }
                         }
+                } else if (FS_IS_DOT(elem)) {
+                        continue;
+                } else {
+                        fs_path_append_s(&out, elem);
                 }
 
-                ++pos;
+                free(mem);
+                mem = FS_DUP(elem);
         }
 
-        for (fs_view *it = newEnd; it < vecEnd; ++it)
-                *it = (fs_view){0};
-
-        vecEnd = newEnd;
-
-        // 7. If the last filename is dot-dot, remove any trailing directory-separator.
-        if (vecEnd - vec >= 2 && vecEnd[-1].count == 0 && FS_STR(ncmp, vecEnd[-2].it, dotDot, 2) == 0)
-                *--vecEnd = (fs_view){0};
-
-        for (const fs_view *it = vec; it < vecEnd; ++it) {
-                if (it->count == 0)
-                        FS_STR(cat, norm, FS_PREFERRED_SEPARATOR_S);
-                else
-                        FS_STR(ncat, norm, it->it, it->count);
-        }
-
-        // 8. If the path is empty, add a dot (normal form of ./ is .).
-        if (norm[0] == FS_PREF('\0')) {
-                norm[0] = FS_PREF('.');
-                norm[1] = FS_PREF('\0');
-        }
-
-        free(vec);
-        return norm;
+        FS_DESTROY_PATH_ITER(it);
+        free(mem);
+        return out;
 }
 
 fs_path fs_path_lexically_relative(fs_cpath p, fs_cpath base)
@@ -3916,7 +3849,7 @@ fs_path fs_path_lexically_relative(fs_cpath p, fs_cpath base)
             || _is_absolute(p, rtnend, &rtdend) != _is_absolute(base, brtnend, &brtdend)
             || (!_has_root_dir(rtnend, rtdend) && _has_root_dir(brtnend, brtdend))
             || (_relative_path_contains_root_name(p) || _relative_path_contains_root_name(base)))
-                return FS_DUP(FS_PREF(""));
+                return FS_DUP(FS_EMPTY);
 
         fs_path_iter pit  = fs_path_begin(p);
         fs_path_iter bit  = fs_path_begin(base);
@@ -3932,7 +3865,7 @@ fs_path fs_path_lexically_relative(fs_cpath p, fs_cpath base)
         }
 
         if (pit.pos == pend.pos && bit.pos == bend.pos) {
-                out = FS_DUP(FS_PREF("."));
+                out = FS_DUP(FS_DOT);
                 goto defer;
         }
 
@@ -3946,27 +3879,27 @@ fs_path fs_path_lexically_relative(fs_cpath p, fs_cpath base)
         FOR_EACH_PATH_ITER(bit) {
                 const _fs_char_cit elem = FS_DEREF_PATH_ITER(bit);
 
-                if (elem[0] == FS_PREF('\0') || FS_STR(cmp, elem, FS_PREF(".")) == 0)
+                if (elem[0] == FS_PREF('\0') || FS_IS_DOT(elem))
                         continue;
-                if (FS_STR(len, elem) >= 2 && FS_STR(cmp, elem, FS_PREF("..")) == 0)
+                if (FS_IS_DOT(elem))
                         --n;
                 else
                         ++n;
         }
 
         if (n < 0) {
-                out = FS_DUP(FS_PREF(""));
+                out = FS_DUP(FS_EMPTY);
                 goto defer;
         }
 
         if (n == 0 && FS_DEREF_PATH_ITER(pit)[0] == '\0') {
-                out = FS_DUP(FS_PREF("."));
+                out = FS_DUP(FS_DOT);
                 goto defer;
         }
 
-        out = FS_DUP(FS_PREF(""));
+        out = FS_DUP(FS_EMPTY);
         for (int i = 0; i < n; ++i)
-                fs_path_append_s(&out, FS_PREF(".."));
+                fs_path_append_s(&out, FS_DOT_DOT);
         FOR_EACH_PATH_ITER(pit)
                 fs_path_append_s(&out, FS_DEREF_PATH_ITER(pit));
 
@@ -4032,7 +3965,7 @@ fs_bool fs_path_has_relative_path(fs_cpath p)
 {
         const _fs_char_cit last = p + FS_STR(len, p);
         const _fs_char_cit rel  = _find_relative_path(p);
-        return last - rel != 0 ? FS_TRUE : FS_FALSE;
+        return _has_relative_path(rel, last);
 }
 
 fs_path fs_path_parent_path(fs_cpath p)
@@ -4048,27 +3981,27 @@ fs_bool fs_path_has_parent_path(fs_cpath p)
 fs_path fs_path_filename(fs_cpath p)
 {
         const _fs_char_cit last = p + FS_STR(len, p);
-        const _fs_char_cit file = _find_filename(p);
+        const _fs_char_cit file = _find_filename(p, NULL);
         return _dupe_string(file, last);
 }
 
 fs_bool fs_path_has_filename(fs_cpath p)
 {
         const _fs_char_cit last = p + FS_STR(len, p);
-        const _fs_char_cit file = _find_filename(p);
-        return last - file != 0 ? FS_TRUE : FS_FALSE;
+        const _fs_char_cit file = _find_filename(p, NULL);
+        return _has_filename(file, last);
 }
 
 fs_path fs_path_stem(fs_cpath p)
 {
-        const _fs_char_cit file = _find_filename(p);
+        const _fs_char_cit file = _find_filename(p, NULL);
         const _fs_char_cit ext  = _find_extension(p, NULL);
         return _dupe_string(file, ext);
 }
 
 fs_bool fs_path_has_stem(fs_cpath p)
 {
-        const _fs_char_cit file = _find_filename(p);
+        const _fs_char_cit file = _find_filename(p, NULL);
         const _fs_char_cit ext  = _find_extension(p, NULL);
         return ext - file != 0 ? FS_TRUE : FS_FALSE;
 }
@@ -4129,7 +4062,7 @@ fs_path_iter fs_path_end(fs_cpath p)
 {
         return (fs_path_iter){
                 .pos   = p + FS_STR(len, p),
-                .elem  = FS_DUP(FS_PREF("")),
+                .elem  = FS_DUP(FS_EMPTY),
                 .begin = p
         };
 }
@@ -4168,7 +4101,7 @@ void fs_path_iter_next(fs_path_iter *it)
 
         if (it->pos == last) {
                 free(FS_DEREF_PATH_ITER(*it));
-                FS_DEREF_PATH_ITER(*it) = FS_DUP(FS_PREF(""));
+                FS_DEREF_PATH_ITER(*it) = FS_DUP(FS_EMPTY);
                 return;
         }
 
@@ -4176,7 +4109,7 @@ void fs_path_iter_next(fs_path_iter *it)
                 if (++it->pos == last) {
                         --it->pos;
                         free(FS_DEREF_PATH_ITER(*it));
-                        FS_DEREF_PATH_ITER(*it) = FS_DUP(FS_PREF(""));
+                        FS_DEREF_PATH_ITER(*it) = FS_DUP(FS_EMPTY);
                         return;
                 }
         }
@@ -4221,7 +4154,7 @@ void fs_path_iter_prev(fs_path_iter *it)
                 --it->pos;
 
                 free(FS_DEREF_PATH_ITER(*it));
-                FS_DEREF_PATH_ITER(*it) = FS_DUP(FS_PREF(""));
+                FS_DEREF_PATH_ITER(*it) = FS_DUP(FS_EMPTY);
 
                 return;
         }
@@ -4288,8 +4221,8 @@ fs_dir_iter fs_directory_iterator_opt(fs_cpath p, fs_directory_options options, 
         fs_cpath *elems = malloc((alloc + 1) * sizeof(fs_cpath));
 
         do {
-                if (FS_STR(cmp, FS_DIR_ENTRY_NAME(entry), FS_PREF(".")) == 0
-                    || FS_STR(cmp, FS_DIR_ENTRY_NAME(entry), FS_PREF("..")) == 0)
+                const fs_cpath name = FS_DIR_ENTRY_NAME(entry);
+                if (FS_IS_DOT(name) || FS_IS_DOT_DOT(name))
                         continue;
 
                 elems[count++] = fs_path_append(p, FS_DIR_ENTRY_NAME(entry));
