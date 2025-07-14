@@ -12,6 +12,7 @@
  - [X] Fix mixed styling
  - [X] Add '\\?\' if a path is > MAX_PATH in windows
  - [ ] System error enums (Windows and Posix)
+ - [ ] Treat all empty "" paths as "."
 
 # Version 1.0.0-alpha
 

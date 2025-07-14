@@ -75,13 +75,6 @@ enum {
 #define _fs_reparse_tag_Mount_point IO_REPARSE_TAG_MOUNT_POINT
 #define _fs_reparse_tag_Symlink     IO_REPARSE_TAG_SYMLINK
 
-typedef enum _fs_symbolic_link_flags {
-        _fs_symbolic_link_flag_None                      = 0x0,
-        _fs_symbolic_link_flag_Directory                 = 0x1,
-        _fs_symbolic_link_flag_Allow_unprivileged_create = 0x2
-
-} _fs_symbolic_link_flag;
-
 typedef enum _fs_file_share_flags {
         _fs_file_share_flags_None   = 0,
         _fs_file_share_flags_Read   = FILE_SHARE_READ,
@@ -112,8 +105,15 @@ typedef struct _fs_stat {
 #ifdef CreateSymbolicLink
 #define FS_SYMLINKS_SUPPORTED
 
+typedef enum _fs_symbolic_link_flags {
+        _fs_symbolic_link_flag_None                      = 0x0,
+        _fs_symbolic_link_flag_Directory                 = SYMBOLIC_LINK_FLAG_DIRECTORY,
+        _fs_symbolic_link_flag_Allow_unprivileged_create = SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE
+
+} _fs_symbolic_link_flag;
+
 typedef struct _fs_reparse_data_buffer {
-        ULONG reparse_tag;
+        ULONG  reparse_tag;
         USHORT reparse_data_length;
         USHORT reserved;
         union {
@@ -122,15 +122,15 @@ typedef struct _fs_reparse_data_buffer {
                         USHORT substitute_name_length;
                         USHORT print_name_offset;
                         USHORT print_name_length;
-                        ULONG flags;
-                        WCHAR path_buffer[1];
+                        ULONG  flags;
+                        WCHAR  path_buffer[1];
                 } symbolic_link_reparse_buffer;
                 struct _fs_mount_point_reparse_buffer {
                         USHORT substitute_name_offset;
                         USHORT substitute_name_length;
                         USHORT print_name_offset;
                         USHORT print_name_length;
-                        WCHAR path_buffer[1];
+                        WCHAR  path_buffer[1];
                 } mount_point_reparse_buffer;
                 struct _fs_generic_reparse_buffer {
                         UCHAR data_buffer[1];
@@ -388,6 +388,7 @@ static void _win32_change_file_permissions(fs_cpath p, fs_bool follow, fs_bool r
 static _fs_stat _win32_get_file_stat(fs_cpath p, _fs_stats_flag flags, fs_error_code *ec);
 #ifdef FS_SYMLINKS_SUPPORTED
 static fs_path _win32_read_symlink(fs_cpath p, fs_error_code *ec);
+static BOOL _win32_delete_symlink(fs_cpath p);
 #endif // FS_SYMLINKS_SUPPORTED
 #pragma endregion win32_utils
 
@@ -408,8 +409,14 @@ fs_bool _linux_sendfile(int in, int out, size_t len, fs_error_code *ec);
 
 #ifdef _WIN32
 #define _relative_path_contains_root_name _win32_relative_path_contains_root_name
+#define FS_REMOVE_DIR(p) _win32_remove_directory(p)
+#define FS_DELETE_FILE(p) _win32_delete_file(p)
+#define FS_DELETE_SYMLINK(p) _win32_delete_symlink(p)
 #else // _WIN32
 #define _relative_path_contains_root_name(...) FS_FALSE
+#define FS_REMOVE_DIR(p) (!rmdir(p))
+#define FS_DELETE_FILE(p) (!remove(p))
+#define FS_DELETE_SYMLINK(p) (!unlink(p))
 #endif // !_WIN32
 #pragma endregion internal_declarations
 
@@ -1303,8 +1310,15 @@ BOOL _win32_create_hard_link(LPCWSTR link, LPCWSTR target, LPSECURITY_ATTRIBUTES
 #ifdef FS_SYMLINKS_SUPPORTED
 BOOLEAN _win32_create_symbolic_link(LPCWSTR link, LPCWSTR target, DWORD flags)
 {
-        BOOLEAN ret     = CreateSymbolicLinkW(link, target, flags);
+        fs_error_code e;
+        const fs_path abs = fs_absolute(target, &e);
+        if (e.code != fs_err_success)
+                return 0;
+
+        BOOLEAN ret     = CreateSymbolicLinkW(link, abs, flags);
         const DWORD err = GetLastError();
+
+        free(abs);
         if (ret || !IS_ERROR_EXCEED(err))
                 return ret;
 
@@ -1752,6 +1766,17 @@ fs_path _win32_read_symlink(fs_cpath p, fs_error_code *ec)
         _win32_close_handle(hFile);
         return _dupe_string(offset, offset + len);
 }
+
+BOOL _win32_delete_symlink(fs_cpath p)
+{
+        const DWORD attrs = _win32_get_file_attributes(p);
+        if (attrs == _fs_file_attr_Invalid)
+                return 0;
+
+        if (FS_FLAG_SET(attrs, _fs_file_attr_Directory))
+                return _win32_remove_directory(p);
+        return _win32_delete_file(p);
+}
 #endif // FS_SYMLINKS_SUPPORTED
 
 #pragma endregion win32_utils
@@ -2181,21 +2206,33 @@ fs_path fs_proximate(fs_cpath p, fs_cpath base, fs_error_code *ec)
         }
 #endif // !NDEBUG
 
-        const fs_path cpath = fs_weakly_canonical(p, ec);
+        fs_path cpath = NULL;
+        fs_path cbase = NULL;
+        fs_path ret   = NULL;
+
+        cpath = fs_weakly_canonical(p, ec);
         if (ec->code != fs_err_success)
                 return NULL;
 
-        const fs_path cbase = fs_weakly_canonical(base, ec);
-        if (ec->code != fs_err_success) {
-                free(cpath);
-                return NULL;
+        if (base[0] != '\0') {
+                cbase = fs_weakly_canonical(base, ec);
+        } else {
+                const fs_path cur = fs_current_path(ec);
+                if (ec->code != fs_err_success)
+                        goto defer;
+                cbase = fs_weakly_canonical(cur, ec);
+                free(cur);
         }
 
-        const fs_path rel = fs_path_lexically_proximate(cpath, cbase);
+        if (ec->code != fs_err_success)
+                goto defer;
 
+        ret = fs_path_lexically_proximate(cpath, cbase);
+
+defer:
         free(cpath);
         free(cbase);
-        return rel;
+        return ret;
 }
 
 void fs_copy(fs_cpath from, fs_cpath to, fs_error_code *ec)
@@ -3167,23 +3204,17 @@ fs_bool fs_remove(fs_cpath p, fs_error_code *ec) {
 
         const fs_file_status st = fs_symlink_status(p, ec);
         if (fs_exists_s(st)) {
-                if (fs_is_directory_s(st) || _is_junction_t(st.type)) {
-#ifdef _WIN32
-                        if (_win32_remove_directory(p))
+                if (fs_is_symlink_s(st)) {
+                        if (FS_DELETE_SYMLINK(p))
                                 return FS_TRUE;
-#else // _WIN32
-                        if (!rmdir())
+                } else if (fs_is_directory_s(st) || _is_junction_t(st.type)) {
+                        if (FS_REMOVE_DIR(p))
                                 return FS_TRUE;
-#endif // !_WIN32
                 } else {
-#ifdef _WIN32
-                        if (_win32_delete_file(p))
+                        if (FS_DELETE_FILE(p))
                                 return FS_TRUE;
-#else // _WIN32
-                        if (!remove(p))
-                                return FS_TRUE;
-#endif // !_WIN32
                 }
+
                 FS_SYSTEM_ERROR(ec, GET_SYSTEM_ERROR());
         } else if (fs_status_known(st))
                 FS_CLEAR_ERROR_CODE(ec);
@@ -3209,7 +3240,7 @@ uintmax_t fs_remove_all(fs_cpath p, fs_error_code *ec)
         uintmax_t count = 0;
         FOR_EACH_ENTRY_IN_DIR(path, it) {
                 const fs_cpath elem = FS_DEREF_RDIR_ITER(it);
-                const fs_bool isdir = fs_is_directory(path, ec);
+                const fs_bool isdir = fs_is_directory_s(fs_symlink_status(path, ec));
                 if (ec->code != fs_err_success)
                         break;
 
@@ -3226,7 +3257,8 @@ uintmax_t fs_remove_all(fs_cpath p, fs_error_code *ec)
         }
         FS_DESTROY_DIR_ITER(it);
 
-        count += fs_remove(p, ec);
+        if (ec->code == fs_err_success)
+                count += fs_remove(p, ec);
         return count;
 }
 
