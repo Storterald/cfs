@@ -13,6 +13,7 @@
  - [X] Add '\\?\' if a path is > MAX_PATH in windows
  - [ ] System error enums (Windows and Posix)
  - [ ] Treat all empty "" paths as "."
+ - [ ] Create fs_remove_all_opt (like copy opt options)
 
 # Version 1.0.0-alpha
 

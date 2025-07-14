@@ -358,7 +358,6 @@ static BOOL _win32_set_file_attributes(LPCWSTR name, DWORD attributes);
 static BOOL _win32_get_file_attributes_ex(LPCWSTR name, GET_FILEEX_INFO_LEVELS level, LPVOID info);
 static BOOL _win32_copy_file(LPCWSTR str, LPCWSTR dst, BOOL fail);
 static BOOL _win32_create_directory(LPCWSTR name, LPSECURITY_ATTRIBUTES sa);
-static BOOL _win32_create_directory_ex(LPCWSTR template, LPCWSTR name, LPSECURITY_ATTRIBUTES sa);
 FS_FORCE_INLINE static int _win32_sh_create_directory_ex_w(HWND window, LPCWSTR name, const SECURITY_ATTRIBUTES *sa);
 static BOOL _win32_create_hard_link(LPCWSTR link, LPCWSTR target, LPSECURITY_ATTRIBUTES sa);
 #ifdef FS_SYMLINKS_SUPPORTED
@@ -1253,29 +1252,6 @@ BOOL _win32_create_directory(LPCWSTR name, LPSECURITY_ATTRIBUTES sa)
 
         ret = CreateDirectoryW(unc, sa);
         free(unc);
-        return ret;
-}
-
-BOOL _win32_create_directory_ex(LPCWSTR template, LPCWSTR name, LPSECURITY_ATTRIBUTES sa)
-{
-        BOOL ret        = CreateDirectoryExW(template, name, sa);
-        const DWORD err = GetLastError();
-        if (ret || !IS_ERROR_EXCEED(err))
-                return ret;
-
-        const LPWSTR unc1 = _win32_prepend_unc(template, FS_FALSE);
-        if (!unc1)
-                return ret;
-
-        const LPWSTR unc2 = _win32_prepend_unc(name, FS_FALSE);
-        if (!unc2) {
-                free(unc1);
-                return ret;
-        }
-
-        ret = CreateDirectoryExW(unc1, unc2, sa);
-        free(unc1);
-        free(unc2);
         return ret;
 }
 
@@ -2250,10 +2226,14 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
                 return;
         }
 #endif // !NDEBUG
-        const fs_bool flink      = FS_FLAG_SET(options, fs_copy_options_skip_symlinks | fs_copy_options_copy_symlinks);
+
+        const fs_bool flink      = FS_FLAG_SET(options,
+                fs_copy_options_skip_symlinks
+                | fs_copy_options_copy_symlinks
+                | fs_copy_options_create_symlinks);
         const fs_file_type ftype = flink ?
-                fs_status(from, ec).type :
-                fs_symlink_status(from, ec).type;
+                fs_symlink_status(from, ec).type :
+                fs_status(from, ec).type;
         if (ec->code != fs_err_success)
                 return;
 
@@ -2272,8 +2252,8 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
 
         const fs_bool tlink      = FS_FLAG_SET(options, fs_copy_options_skip_symlinks | fs_copy_options_create_symlinks);
         const fs_file_type ttype = tlink ?
-                fs_status(to, ec).type :
-                fs_symlink_status(to, ec).type;
+                fs_symlink_status(to, ec).type :
+                fs_status(to, ec).type;
         if (ec->code != fs_err_success)
                 return;
 
@@ -2380,8 +2360,7 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
                                 return;
                 }
 
-                if (FS_FLAG_SET(options, fs_copy_options_recursive)
-                    || !FS_FLAG_SET(options, fs_copy_options_directories_only)) {
+                if (FS_FLAG_SET(options, fs_copy_options_recursive)) {
                         fs_dir_iter it = fs_directory_iterator(from, ec);
                         if (ec->code != fs_err_success)
                                 return;
@@ -2405,7 +2384,7 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
 
 void fs_copy_file(fs_cpath from, fs_cpath to, fs_error_code *ec)
 {
-        fs_copy_opt(from, to, fs_copy_options_none, ec);
+        fs_copy_file_opt(from, to, fs_copy_options_none, ec);
 }
 
 void fs_copy_file_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_code *ec)
@@ -2557,7 +2536,8 @@ fs_bool fs_create_directory_cp(fs_cpath p, fs_cpath existing_p, fs_error_code *e
 #endif // !NDEBUG
 
 #ifdef _WIN32
-        if (!_win32_create_directory_ex(existing_p, p, NULL)) {
+        (void)existing_p;
+        if (!_win32_create_directory(p, NULL)) {
                 const DWORD err = GetLastError();
                 if (err != fs_win_error_already_exists)
                         FS_SYSTEM_ERROR(ec, err);
