@@ -4,7 +4,6 @@
  - [ ] Tests with GoogleTest
  - [ ] GitHub actions for Windows, Linux and macOS
  - [ ] Verify alloctions
- - [ ] Make api return error and return old output by parameter pointer
  - [ ] Check parameters
  - [X] Verify minimum OS version off all API calls used (Windows, Linux, macOS, BSD)
  - [X] Make sure every call that returns path handles resizes (with for (;;) or similar)
