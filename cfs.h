@@ -48,6 +48,43 @@ typedef enum fs_win_errors {
 #define FS_CHAR char
 #define FS_PREFERRED_SEPARATOR '/'
 #define FS_PREFERRED_SEPARATOR_S "/"
+
+typedef enum fs_posix_errors {
+        fs_posix_error_success                           = 0,
+        fs_posix_error_operation_not_permitted           = EPERM,
+        fs_posix_error_no_such_file_or_directory         = ENOENT,
+        fs_posix_error_interrupted_function_call         = EINTR,
+        fs_posix_error_input_output_error                = EIO,
+        fs_posix_error_no_such_device_or_address         = ENXIO,
+        fs_posix_error_bad_file_descriptor               = EBADF,
+        fs_posix_error_resource_temporarily_unavailable  = EAGAIN,
+        fs_posix_error_cannot_allocate_memory            = ENOMEM,
+        fs_posix_error_permission_denied                 = EACCES,
+        fs_posix_error_bad_address                       = EFAULT,
+        fs_posix_error_device_or_resource_busy           = EBUSY,
+        fs_posix_error_file_exists                       = EEXIST,
+        fs_posix_error_invalid_cross_device_link         = EXDEV,
+        fs_posix_error_no_such_device                    = ENODEV,
+        fs_posix_error_not_a_directory                   = ENOTDIR,
+        fs_posix_error_is_a_directory                    = EISDIR,
+        fs_posix_error_invalid_argument                  = EINVAL,
+        fs_posix_error_too_many_files_open_in_system     = ENFILE,
+        fs_posix_error_too_many_open_files               = EMFILE,
+        fs_posix_error_file_too_large                    = EFBIG,
+        fs_posix_error_no_space_left_on_disk             = ENOSPC,
+        fs_posix_error_read_only_filesystem              = EROFS,
+        fs_posix_error_too_many_links                    = EMLINK,
+        fs_posix_error_broken_pipe                       = EPIPE,
+        fs_posix_error_filename_too_long                 = ENAMETOOLONG,
+        fs_posix_error_destination_address_required      = EDESTADDRREQ,
+        fs_posix_error_too_many_levels_of_symbolic_links = ELOOP,
+        fs_posix_error_disk_quota_exceeded               = EDQUOT,
+        fs_posix_error_operation_not_supported_on_socket = EOPNOTSUPP,
+        fs_posix_error_value_too_large                   = EOVERFLOW,
+        fs_posix_error_text_file_busy                    = ETXTBSY,
+        fs_posix_error_operation_would_block             = EWOULDBLOCK
+
+} fs_posix_errors;
 #endif // !_WIN32
 
 #define FS_DEREF_PATH_ITER(it) ((it).elem)
@@ -140,7 +177,7 @@ typedef enum fs_perms {
         fs_perms_unknown    = 0xFFFF,
 
         _fs_perms_All_write               = fs_perms_owner_write | fs_perms_group_write | fs_perms_other_write,
-        _fs_perms_File_attribute_readonly = fs_perms_all & ~_fs_perms_All_write // returned for files with FILE_ATTRIBUTE_READONLY
+        _fs_perms_File_attribute_readonly = fs_perms_all & ~_fs_perms_All_write
 
 } fs_perms;
 
@@ -345,69 +382,69 @@ fs_bool fs_status_known(fs_file_status s);
 
 // -------- fs_path
 
-fs_path fs_path_append(fs_cpath p, fs_cpath other);
+fs_path fs_path_append(fs_cpath p, fs_cpath other, fs_error_code *ec);
 
-void fs_path_append_s(fs_path *pp, fs_cpath other);
+void fs_path_append_s(fs_path *pp, fs_cpath other, fs_error_code *ec);
 
-fs_path fs_path_concat(fs_cpath p, fs_cpath other);
+fs_path fs_path_concat(fs_cpath p, fs_cpath other, fs_error_code *ec);
 
-void fs_path_concat_s(fs_path *pp, fs_cpath other);
+void fs_path_concat_s(fs_path *pp, fs_cpath other, fs_error_code *ec);
 
-void fs_path_clear(fs_path *pp);
+void fs_path_clear(fs_path *pp, fs_error_code *ec);
 
-void fs_path_make_preferred(fs_path *pp);
+void fs_path_make_preferred(fs_path *pp, fs_error_code *ec);
 
-void fs_path_remove_filename(fs_path *pp);
+void fs_path_remove_filename(fs_path *pp, fs_error_code *ec);
 
 void fs_path_replace_filename(fs_path *pp, fs_cpath replacement, fs_error_code *ec);
 
 void fs_path_replace_extension(fs_path *pp, fs_cpath replacement, fs_error_code *ec);
 
-int fs_path_compare(fs_cpath p, fs_cpath other);
+int fs_path_compare(fs_cpath p, fs_cpath other, fs_error_code *ec);
 
-fs_path fs_path_lexically_normal(fs_cpath p);
+fs_path fs_path_lexically_normal(fs_cpath p, fs_error_code *ec);
 
-fs_path fs_path_lexically_relative(fs_cpath p, fs_cpath base);
+fs_path fs_path_lexically_relative(fs_cpath p, fs_cpath base, fs_error_code *ec);
 
-fs_path fs_path_lexically_proximate(fs_cpath p, fs_cpath base);
+fs_path fs_path_lexically_proximate(fs_cpath p, fs_cpath base, fs_error_code *ec);
 
-fs_path fs_path_root_name(fs_cpath p);
+fs_path fs_path_root_name(fs_cpath p, fs_error_code *ec);
 
-fs_path fs_path_root_directory(fs_cpath p);
+fs_path fs_path_root_directory(fs_cpath p, fs_error_code *ec);
 
-fs_path fs_path_root_path(fs_cpath p);
+fs_path fs_path_root_path(fs_cpath p, fs_error_code *ec);
 
-fs_path fs_path_relative_path(fs_cpath p);
+fs_path fs_path_relative_path(fs_cpath p, fs_error_code *ec);
 
-fs_path fs_path_parent_path(fs_cpath p);
+fs_path fs_path_parent_path(fs_cpath p, fs_error_code *ec);
 
-fs_path fs_path_filename(fs_cpath p);
+fs_path fs_path_filename(fs_cpath p, fs_error_code *ec);
 
-fs_path fs_path_stem(fs_cpath p);
+fs_path fs_path_stem(fs_cpath p, fs_error_code *ec);
 
-fs_path fs_path_extension(fs_cpath p);
+fs_path fs_path_extension(fs_cpath p, fs_error_code *ec);
 
-fs_bool fs_path_has_root_path(fs_cpath p);
+fs_bool fs_path_has_root_path(fs_cpath p, fs_error_code *ec);
 
-fs_bool fs_path_has_root_name(fs_cpath p);
+fs_bool fs_path_has_root_name(fs_cpath p, fs_error_code *ec);
 
-fs_bool fs_path_has_root_directory(fs_cpath p);
+fs_bool fs_path_has_root_directory(fs_cpath p, fs_error_code *ec);
 
-fs_bool fs_path_has_relative_path(fs_cpath p);
+fs_bool fs_path_has_relative_path(fs_cpath p, fs_error_code *ec);
 
-fs_bool fs_path_has_parent_path(fs_cpath p);
+fs_bool fs_path_has_parent_path(fs_cpath p, fs_error_code *ec);
 
-fs_bool fs_path_has_filename(fs_cpath p);
+fs_bool fs_path_has_filename(fs_cpath p, fs_error_code *ec);
 
-fs_bool fs_path_has_stem(fs_cpath p);
+fs_bool fs_path_has_stem(fs_cpath p, fs_error_code *ec);
 
-fs_bool fs_path_has_extension(fs_cpath p);
+fs_bool fs_path_has_extension(fs_cpath p, fs_error_code *ec);
 
-fs_bool fs_path_is_absolute(fs_cpath p);
+fs_bool fs_path_is_absolute(fs_cpath p, fs_error_code *ec);
 
-fs_bool fs_path_is_relative(fs_cpath p);
+fs_bool fs_path_is_relative(fs_cpath p, fs_error_code *ec);
 
-fs_path_iter fs_path_begin(fs_cpath p);
+fs_path_iter fs_path_begin(fs_cpath p, fs_error_code *ec);
 
 fs_path_iter fs_path_end(fs_cpath p);
 

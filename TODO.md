@@ -3,15 +3,14 @@
  - [ ] Optimize functions avoiding multiple equal parsing calls
  - [ ] Tests with GoogleTest
  - [ ] GitHub actions for Windows, Linux and macOS
- - [ ] Verify alloctions
- - [ ] Check parameters
+ - [ ] Verify allocations
+ - [X] Check parameters
  - [X] Verify minimum OS version off all API calls used (Windows, Linux, macOS, BSD)
  - [X] Make sure every call that returns path handles resizes (with for (;;) or similar)
  - [ ] Don't precompute all directory iterators members
  - [X] Fix mixed styling
  - [X] Add '\\?\' if a path is > MAX_PATH in windows
- - [ ] System error enums (Windows and Posix)
- - [ ] Treat all empty "" paths as "."
+ - [X] System error enums (Windows and Posix)
  - [ ] Create fs_remove_all_opt (like copy opt options)
 
 # Version 1.0.0-alpha
