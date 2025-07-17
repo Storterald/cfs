@@ -163,7 +163,7 @@
       "name": "gcc-test-release-build",
       "displayName": "GCC Test Release",
       "configuration": "Release",
-      "configurePreset": "gcc-test"
+      "configurePreset": "gcc-test-release"
     },
     {
       "name": "gcc-release-build",
