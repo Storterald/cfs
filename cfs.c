@@ -399,6 +399,7 @@ _FS_FORCE_INLINE BOOL _win32_set_end_of_file(HANDLE handle);
 static BOOL _win32_get_volume_path_name(LPCWSTR name, LPWSTR buf, DWORD len);
 static BOOL _win32_get_disk_free_space_ex(LPCWSTR name, PULARGE_INTEGER available, PULARGE_INTEGER total, PULARGE_INTEGER free);
 _FS_FORCE_INLINE static DWORD _win32_get_temp_path(DWORD len, LPWSTR buf);
+_FS_FORCE_INLINE static BOOL _win32_device_io_control(HANDLE handle, DWORD code, LPVOID inbuf, DWORD insize, LPVOID outbuf, DWORD outsize, LPDWORD bytes, LPOVERLAPPED overlapped);
 #pragma endregion win32_api_wrappers
 
 #pragma region win32_utils
@@ -1178,9 +1179,10 @@ fs_bool _win32_is_drive(fs_cpath p)
 }
 
 fs_bool _win32_relative_path_contains_root_name(fs_cpath p) {
-        const size_t len   = _FS_STR(len, p);
-        _fs_char_cit first = _find_relative_path(p);
-        _fs_char_cit last  = p + len;
+        const size_t len         = _FS_STR(len, p);
+        _fs_char_cit first       = _find_relative_path(p);
+        const _fs_char_cit last  = p + len;
+
         while (first != last) {
                 _fs_char_cit next = first;
                 while (next != last && !_is_separator(*next))
@@ -1606,6 +1608,11 @@ DWORD _win32_get_temp_path(DWORD len, LPWSTR buf)
         return GetTempPathW(len, buf);
 }
 
+BOOL _win32_device_io_control(HANDLE handle, DWORD code, LPVOID inbuf, DWORD insize, LPVOID outbuf, DWORD outsize, LPDWORD bytes, LPOVERLAPPED overlapped)
+{
+        return DeviceIoControl(handle, code, inbuf, insize, outbuf, outsize, bytes, overlapped);
+}
+
 #pragma endregion win32_api_wrappers
 
 #pragma region win32_utils
@@ -1837,43 +1844,37 @@ fs_path _win32_read_symlink(fs_cpath p, fs_error_code *ec)
                 return NULL;
 
         uint8_t buf[MAXIMUM_REPARSE_DATA_BUFFER_SIZE + sizeof(wchar_t)];
-        DWORD bytes;
-        if (!DeviceIoControl(hFile, FSCTL_GET_REPARSE_POINT, NULL, 0, buf, MAXIMUM_REPARSE_DATA_BUFFER_SIZE + 1, &bytes, NULL)) {
+        if (!_win32_device_io_control(hFile, FSCTL_GET_REPARSE_POINT, NULL, 0, buf, MAXIMUM_REPARSE_DATA_BUFFER_SIZE + 1, NULL, NULL)) {
                 _FS_SYSTEM_ERROR(ec, GetLastError());
                 _win32_close_handle(hFile);
                 return NULL;
         }
 
-        _fs_reparse_data_buffer *rdata = (_fs_reparse_data_buffer *)buf;
-
         USHORT len;
         wchar_t *offset;
+        _fs_reparse_data_buffer *rdata = (_fs_reparse_data_buffer *)buf;
 
         if (rdata->reparse_tag == _fs_reparse_tag_Symlink) {
                 _fs_symbolic_link_reparse_buffer *sbuf = &rdata->buffer.symbolic_link_reparse_buffer;
                 const USHORT tmp = sbuf->print_name_length / sizeof(wchar_t);
 
                 if (tmp == 0) {
-                        const USHORT idx = sbuf->substitute_name_offset / sizeof(wchar_t);
-                        len              = sbuf->substitute_name_length / sizeof(wchar_t);
-                        offset           = &sbuf->path_buffer[idx];
+                        len     = sbuf->substitute_name_length / sizeof(wchar_t);
+                        offset = &sbuf->path_buffer[sbuf->substitute_name_offset / sizeof(wchar_t)];
                 } else {
-                        const USHORT idx = sbuf->print_name_offset / sizeof(wchar_t);
-                        len              = sbuf->print_name_length / sizeof(wchar_t);
-                        offset           = &sbuf->path_buffer[idx];
+                        len    = sbuf->print_name_length / sizeof(wchar_t);
+                        offset = &sbuf->path_buffer[sbuf->print_name_offset / sizeof(wchar_t)];
                 }
         } else if (rdata->reparse_tag == _fs_reparse_tag_Mount_point) {
                 _fs_mount_point_reparse_buffer *jbuf = &rdata->buffer.mount_point_reparse_buffer;
                 const USHORT tmp                     = jbuf->print_name_length / sizeof(wchar_t);
 
                 if (tmp == 0) {
-                        const USHORT idx = jbuf->substitute_name_offset / sizeof(wchar_t);
-                        len              = jbuf->substitute_name_length / sizeof(wchar_t);
-                        offset           = &jbuf->path_buffer[idx];
+                        len    = jbuf->substitute_name_length / sizeof(wchar_t);
+                        offset = &jbuf->path_buffer[jbuf->substitute_name_offset / sizeof(wchar_t)];
                 } else {
-                        const USHORT idx = jbuf->print_name_offset / sizeof(wchar_t);
-                        len              = jbuf->print_name_length / sizeof(wchar_t);
-                        offset           = &jbuf->path_buffer[idx];
+                        len    = jbuf->print_name_length / sizeof(wchar_t);
+                        offset = &jbuf->path_buffer[jbuf->print_name_offset / sizeof(wchar_t)];
                 }
         } else {
                 _FS_SYSTEM_ERROR(ec, fs_win_error_reparse_tag_invalid);
