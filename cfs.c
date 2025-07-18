@@ -13,11 +13,9 @@ static fs_error_code _fs_internal_error = {0};
 
 #define _FS_UNIX_EPOCH_TO_FILETIME_EPOCH 116444736000000000ULL
 
-#define _FS_PREF(s) L##s
-#define _FS_MAX_PATH MAX_PATH // used outside OS specific blocks
-
+#define _FS_PREF(s)           L##s
 #define _FS_STR(__foo__, ...) wcs##__foo__(__VA_ARGS__)
-#define _FS_DUP _FS_WDUP
+#define _FS_DUP               _FS_WDUP
 
 #define _FS_IS_ERROR_EXCEED(__err__)                            \
         ((__err__) == fs_win_error_path_not_found               \
@@ -188,15 +186,12 @@ typedef struct _fs_generic_reparse_buffer       _fs_generic_reparse_buffer;
 #endif // __GLIBC__ && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 1))
 #endif // __linux__
 
-#define _FS_SYMLINKS_SUPPORTED
-
-#define _FS_OFF_MAX (~((off_t)1 << (sizeof(off_t) * 8 - 1)))
-
 #define _FS_PREF(s)           s
-#define _FS_MAX_PATH          PATH_MAX
 #define _FS_STR(__foo__, ...) str##__foo__(__VA_ARGS__)
 #define _FS_DUP               _FS_SDUP
+#define _FS_OFF_MAX           (~((off_t)1 << (sizeof(off_t) * 8 - 1)))
 
+#define _FS_SYMLINKS_SUPPORTED
 #define _FS_GET_SYSTEM_ERROR() errno
 
 typedef enum _fs_open_flags {
@@ -2286,7 +2281,7 @@ fs_path fs_canonical(fs_cpath p, fs_error_code *ec)
         if (kind == _fs_path_kind_Dos) {
                 wchar_t *output = buf;
 
-                if (wcsncmp(p, L"\\\\?\\", 4) == 0 && _win32_is_drive(p + 4)) {
+                if (wcsncmp(finalp, L"\\\\?\\", 4) == 0 && _win32_is_drive(finalp + 4)) {
                         output += 4;
                 } else if (wcsncmp(buf, L"\\\\?\\UNC\\", 8) == 0) {
                         output[6] = L'\\';
@@ -2505,11 +2500,8 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
         if (_FS_IS_ERROR_SET(ec))
                 return;
 
-        // fs_copy_opt without the option fs_copy_options_directories_only or
-        // fs_copy_options_recursive cannot copy sub-directories.
-        if (_FS_ANY_FLAG_SET(options, _fs_copy_options_In_recursive_copy) && _is_directory_t(ftype)
-            && !(_FS_ANY_FLAG_SET(options, fs_copy_options_recursive)
-                || _FS_ANY_FLAG_SET(options, fs_copy_options_directories_only))) {
+        if (_is_directory_t(ftype) && _FS_ANY_FLAG_SET(options, _fs_copy_options_In_recursive_copy)
+            && !_FS_ANY_FLAG_SET(options, fs_copy_options_recursive | fs_copy_options_directories_only)) {
                 return;
         }
 
@@ -2519,8 +2511,7 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
         }
 
         const fs_bool tlink = _FS_ANY_FLAG_SET(options,
-                fs_copy_options_skip_symlinks
-                | fs_copy_options_create_symlinks);
+                fs_copy_options_skip_symlinks | fs_copy_options_create_symlinks);
         fs_file_type ttype = tlink ?
                 fs_symlink_status(to, ec).type :
                 fs_status(to, ec).type;
