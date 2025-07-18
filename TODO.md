@@ -9,7 +9,7 @@
  - [X] Make sure every call that returns path handles resizes (with for (;;) or similar)
  - [ ] Don't precompute all directory iterators members
  - [X] Fix mixed styling
- - [X] Add '\\?\' if a path is > MAX_PATH in windows
+ - [X] Add '\\?\' if a path is > MAX_PATH on Windows
  - [X] System error enums (Windows and Posix)
  - [ ] Create fs_remove_all_opt (like copy opt options)
 
@@ -42,7 +42,7 @@
    - [X] fs_last_write_time
    - [X] fs_set_last_write_time
    - [X] fs_permissions
-   - [X] fs_set_permissions
+   - [X] fs_permissions_opt
    - [X] fs_read_symlink
    - [X] fs_remove
    - [X] fs_remove_all

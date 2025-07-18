@@ -178,16 +178,16 @@ typedef enum fs_perms {
         fs_perms_mask       = 07777,
         fs_perms_unknown    = 0xFFFF,
 
-        _fs_perms_All_write               = fs_perms_owner_write | fs_perms_group_write | fs_perms_other_write,
-        _fs_perms_File_attribute_readonly = fs_perms_all & ~_fs_perms_All_write
+        _fs_perms_All_write = fs_perms_owner_write | fs_perms_group_write | fs_perms_other_write,
+        _fs_perms_Readonly  = fs_perms_all & ~_fs_perms_All_write
 
 } fs_perms;
 
 typedef enum fs_perm_options {
-        fs_perm_options_replace,
-        fs_perm_options_add,
-        fs_perm_options_remove,
-        fs_perm_options_nofollow
+        fs_perm_options_replace  = 0x0,
+        fs_perm_options_add      = 0x1,
+        fs_perm_options_remove   = 0x2,
+        fs_perm_options_nofollow = 0x4,
 
 } fs_perm_options;
 

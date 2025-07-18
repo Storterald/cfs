@@ -20,9 +20,9 @@ On `Windows`, paths above `MAX_PATH` *(260 chars)* length are supported.
 library adopts the most **common** or **logical** way across various implementation,
 or a **custom** one.
 
-Empty paths `""` are **not** transformed in `"."` and `NULL` paths are treated as
-an error in `Debug` (**fs_err_invalid_argument**) or **undefined behaviour** in
-`Release` mode.
-
+ - Empty paths `""` are **not** transformed in `"."` and `NULL` paths are treated as 
+   an error in `Debug` (**fs_err_invalid_argument**) or **undefined behaviour** in
+   `Release` mode.
+ - `fs_file_time_type` is based on the **UNIX** epoch on **all** OSs.
  - `fs_remove_all` does **not** follow symbolic links, only the link is removed.
  - `fs_relative` and `fs_proximate` **do** follow symlinks.

@@ -727,7 +727,7 @@ fs_file_status _make_status(const _fs_stat *st, fs_error_code *ec)
         const _fs_reparse_tag tag = st->reparse_point_tag;
 
         if (_FS_ANY_FLAG_SET(attrs, _fs_file_attr_Readonly))
-                status.perms = _fs_perms_File_attribute_readonly;
+                status.perms = _fs_perms_Readonly;
         else
                 status.perms = fs_perms_all;
 
@@ -3204,10 +3204,16 @@ uintmax_t fs_hard_link_count(fs_cpath p, fs_error_code *ec)
                 return (uintmax_t)-1;
         }
 
+        if (!fs_is_regular_file(p, ec) || _FS_IS_ERROR_SET(ec)) {
+                if (!_FS_IS_ERROR_SET(ec))
+                        _FS_CFS_ERROR(ec, fs_err_is_a_directory);
+                return (uintmax_t)-1;
+        }
+
 #ifdef _WIN32
         const HANDLE handle = _win32_get_handle(
                 p, _fs_access_rights_File_read_attributes,
-                _fs_file_flags_Backup_semantics, ec);
+                _fs_file_flags_Normal, ec);
         if (_FS_IS_ERROR_SET(ec))
                 return (uintmax_t)-1;
 
@@ -3401,9 +3407,7 @@ void fs_permissions_opt(fs_cpath p, fs_perms prms, fs_perm_options opts, fs_erro
         if (replace + add + remove != 1)
                 _FS_CFS_ERROR(ec, fs_err_invalid_argument);
 
-        const fs_file_status st = nofollow ?
-                fs_status(p, ec) :
-                fs_symlink_status(p, ec);
+        const fs_file_status st = nofollow ? fs_status(p, ec) : fs_symlink_status(p, ec);
         if (_FS_IS_ERROR_SET(ec))
                 return;
 
