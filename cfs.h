@@ -76,9 +76,11 @@ typedef enum fs_posix_errors {
         fs_posix_error_too_many_links                    = EMLINK,
         fs_posix_error_broken_pipe                       = EPIPE,
         fs_posix_error_filename_too_long                 = ENAMETOOLONG,
+        fs_posix_error_function_not_implemented          = ENOSYS,
         fs_posix_error_destination_address_required      = EDESTADDRREQ,
         fs_posix_error_too_many_levels_of_symbolic_links = ELOOP,
         fs_posix_error_disk_quota_exceeded               = EDQUOT,
+        fs_posix_error_operation_not_supported           = ENOTSUP,
         fs_posix_error_operation_not_supported_on_socket = EOPNOTSUPP,
         fs_posix_error_value_too_large                   = EOVERFLOW,
         fs_posix_error_text_file_busy                    = ETXTBSY,
@@ -233,7 +235,7 @@ typedef enum fs_err {
         fs_err_is_a_directory            = EISDIR,
         fs_err_invalid_argument          = EINVAL,
         fs_err_name_too_long             = ENAMETOOLONG,
-        fs_err_function_not_supported    = ENOSYS,
+        fs_err_function_not_supported    = ENOTSUP,
         fs_err_loop                      = ELOOP
 
 } fs_err;

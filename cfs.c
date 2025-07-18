@@ -331,7 +331,7 @@ _FS_FORCE_INLINE static fs_bool _is_absolute(fs_cpath p, _fs_char_cit rtnend, _f
 static fs_file_status _make_status(const _fs_stat *st, fs_error_code *ec);
 static fs_file_status _status(fs_cpath p, _fs_stat *outst, fs_error_code *ec);
 static fs_file_status _symlink_status(fs_cpath p, _fs_stat *outst, fs_error_code *ec);
-static _fs_dir _find_first(fs_cpath p, _fs_dir_entry *entry, fs_bool skipdenied, fs_error_code *ec);
+static _fs_dir _find_first(fs_cpath p, _fs_dir_entry *entry, fs_bool skipdenied, fs_bool pattern, fs_error_code *ec);
 static fs_bool _find_next(_fs_dir dir, _fs_dir_entry *entry, fs_bool skipdenied, fs_error_code *ec);
 static int _get_recursive_entries(fs_cpath p, fs_cpath **buf, int *alloc, fs_bool follow, fs_bool skipdenied, fs_error_code *ec, int idx, fs_bool *fe);
 _FS_FORCE_INLINE static void _make_preferred(fs_path p, size_t len);
@@ -363,7 +363,6 @@ static _fs_char_cit _find_extension(fs_cpath p, _fs_char_cit *extend);
 #ifdef _WIN32
 #pragma region win32_str_manip
 _FS_FORCE_INLINE static fs_bool _win32_is_drive(fs_cpath p);
-_FS_FORCE_INLINE static fs_bool _win32_is_drive_prefix_with_slash_slash_question(fs_cpath p);
 static fs_bool _win32_relative_path_contains_root_name(fs_cpath p);
 static LPWSTR _win32_prepend_unc(LPCWSTR path, fs_bool separate);
 #pragma endregion win32_str_manip
@@ -450,7 +449,6 @@ _FS_FORCE_INLINE static int _posix_statvfs(const char *name, struct statvfs *st)
 #pragma endregion posix_api_wrappers
 
 #pragma region posix_utils
-static fs_file_type _posix_get_file_type(const struct stat *st);
 static fs_bool _posix_create_dir(fs_cpath p, fs_perms perms, fs_error_code *ec);
 static void _posix_copy_file(fs_cpath from, fs_cpath to, struct stat *fst, fs_error_code *ec);
 static void _posix_copy_file_fallback(int in, int out, fs_error_code *ec);
@@ -615,12 +613,16 @@ char *_fs_error_string(fs_error_type type, uint32_t e)
                         return _FS_SDUP("cfs posix error: broken pipe");
                 case fs_posix_error_filename_too_long:
                         return _FS_SDUP("cfs posix error: filename too long");
+                case fs_posix_error_function_not_implemented:
+                        return _FS_SDUP("cfs posix error: function not implemented");
                 case fs_posix_error_destination_address_required:
                         return _FS_SDUP("cfs posix error: destination address "
                                         "required");
                 case fs_posix_error_too_many_levels_of_symbolic_links:
                         return _FS_SDUP("cfs posix error: too many levels of "
                                         "symbolic links");
+                case fs_posix_error_operation_not_supported:
+                        return _FS_SDUP("cfs posix error: operation not supported");
                 case fs_posix_error_operation_not_supported_on_socket:
                         return _FS_SDUP("cfs posix error: operation not supported "
                                         "on socket");
@@ -680,7 +682,7 @@ int _compare_time(const fs_file_time_type *t1, const fs_file_time_type *t2)
 fs_bool _is_separator(FS_CHAR c)
 {
 #ifdef _WIN32
-        return c == '\\' || c == '/';
+        return c == L'\\' || c == L'/';
 #else // _WIN32
         return c == '/';
 #endif // !_WIN32
@@ -725,7 +727,7 @@ fs_file_status _make_status(const _fs_stat *st, fs_error_code *ec)
                 };
         }
 
-        fs_file_status status     = (fs_file_status){0};
+        fs_file_status status;
         const _fs_file_attr attrs = st->attributes;
         const _fs_reparse_tag tag = st->reparse_point_tag;
 
@@ -754,10 +756,32 @@ fs_file_status _make_status(const _fs_stat *st, fs_error_code *ec)
         return status;
 #else // _WIN32
         (void)ec;
-        return (fs_file_status){
-                .type  = _posix_get_file_type(st),
-                .perms = st->st_mode & fs_perms_mask
-        };
+        fs_file_status status = { .perms = st->st_mode & fs_perms_mask };
+
+#ifdef S_ISREG
+        if (S_ISREG(st->st_mode))
+                status.type = fs_file_type_regular;
+        else if (S_ISDIR(st->st_mode))
+                status.type = fs_file_type_directory;
+        else if (S_ISCHR(st->st_mode))
+                status.type = fs_file_type_character;
+        else if (S_ISBLK(st->st_mode))
+                status.type = fs_file_type_block;
+        else if (S_ISFIFO(st->st_mode))
+                status.type = fs_file_type_fifo;
+#ifdef S_ISLNK
+        else if (S_ISLNK(st->st_mode))
+                status.type = fs_file_type_symlink;
+#endif // !S_ISLNK
+#ifdef S_ISSOCK
+        else if (S_ISSOCK(st->st_mode))
+                status.type = fs_file_type_socket;
+#endif // S_ISSOCK
+        else
+#endif // !S_ISREG
+                status.type = fs_file_type_unknown;
+
+        return status;
 #endif // !_WIN32
 }
 
@@ -774,18 +798,17 @@ fs_file_status _status(fs_cpath p, _fs_stat *outst, fs_error_code *ec)
 #else // _WIN32
         if (_posix_stat(p, outst)) {
                 const int err = errno;
-                if (err == ENOENT || err == ENOTDIR)
+                if (err == fs_posix_error_no_such_file_or_directory
+                    || err == fs_posix_error_not_a_directory)
                         return {
                                 .type = fs_file_type_not_found,
                                 .perms = 0
                         };
-#ifdef EOVERFLOW
-                if (err == EOVERFLOW)
+                if (err == fs_posix_error_value_too_large)
                         return {
                                 .type = fs_file_type_unknown,
                                 .perms = 0
                         };
-#endif // EOVERFLOW
                 _FS_SYSTEM_ERROR(ec, err);
         } else {
                 return _make_status(outst, ec);
@@ -808,7 +831,8 @@ fs_file_status _symlink_status(fs_cpath p, _fs_stat *outst, fs_error_code *ec)
 #else // _WIN32
         if (_posix_lstat(p, outst)) {
                 const int err = errno;
-                if (err == ENOENT || err == ENOTDIR)
+                if (err == fs_posix_error_no_such_file_or_directory
+                    || err == fs_posix_error_not_a_directory)
                         return {
                                 .type = fs_file_type_not_found,
                                 .perms = 0
@@ -823,10 +847,21 @@ fs_file_status _symlink_status(fs_cpath p, _fs_stat *outst, fs_error_code *ec)
 #endif // !_WIN32
 }
 
-_fs_dir _find_first(fs_cpath p, _fs_dir_entry *entry, fs_bool skipdenied, fs_error_code *ec)
+_fs_dir _find_first(fs_cpath p, _fs_dir_entry *entry, fs_bool skipdenied, fs_bool pattern, fs_error_code *ec)
 {
 #ifdef _WIN32
-        const HANDLE handle = _win32_find_first(p, entry);
+        fs_cpath sp = p;
+        if (pattern) {
+                const fs_path tmp = malloc((wcslen(p) + 3) * sizeof(wchar_t));
+                wcscpy(tmp, p);
+                wcscat(tmp, L"\\*");
+                sp = tmp;
+        }
+
+        const HANDLE handle = _win32_find_first(sp, entry);
+        if (pattern)
+                free((fs_path)sp);
+
         if (handle == INVALID_HANDLE_VALUE) {
                 const DWORD err = GetLastError();
                 if (!skipdenied || err != fs_win_error_access_denied)
@@ -836,6 +871,8 @@ _fs_dir _find_first(fs_cpath p, _fs_dir_entry *entry, fs_bool skipdenied, fs_err
         }
         return handle;
 #else // _WIN32
+        (void)pattern;
+
         DIR *dir = _posix_opendir(p);
         if (!dir) {
                 _FS_SYSTEM_ERROR(ec, errno);
@@ -868,7 +905,7 @@ fs_bool _find_next(_fs_dir dir, _fs_dir_entry *entry, fs_bool skipdenied, fs_err
         *entry        = _posix_readdir(dir);
         const int err = errno;
 
-        if (skipdenied && err == EACCES)
+        if (skipdenied && err == fs_posix_error_permission_denied)
                 return FS_FALSE;
 
         if (err != 0) {
@@ -886,20 +923,8 @@ int _get_recursive_entries(fs_cpath p, fs_cpath **buf, int *alloc, fs_bool follo
         if (!fe)
                 fe = &forceexit;
 
-#ifdef _WIN32
-        const fs_path sp = malloc((wcslen(p) + 3) * sizeof(wchar_t));
-        wcscpy(sp, p);
-        wcscat(sp, L"\\*");
-#else // _WIN32
-        const fs_cpath sp = p;
-#endif // !_WIN32
-
         _fs_dir_entry entry;
-        const _fs_dir dir = _find_first(sp, &entry, skipdenied, ec);
-
-#ifdef _WIN32
-        free(sp);
-#endif // _WIN32
+        const _fs_dir dir = _find_first(p, &entry, skipdenied, FS_TRUE, ec);
 
         if (_FS_IS_ERROR_SET(ec)) {
                 *fe = FS_TRUE;
@@ -1050,23 +1075,24 @@ _fs_char_cit _find_root_name_end(fs_cpath p)
         if (len < 2)  // Too short for root name
                 return p;
 
-        if (!_FS_IS_EMPTY(p) && p[1] == L':')
+        if (_win32_is_drive(p))
                 return p + 2;
 
         if (!_is_separator(p[0]))
                 return p;
 
-        if (len >= 4 && _is_separator(p[3]) && (len == 4 || !_is_separator(p[4])) && // \xx\$
-            ((_is_separator(p[1]) && (p[2] == L'?' || p[2] == L'.')) || // \\?\$ or \\.\$
-             (p[1] == L'?' && p[2] == L'?'))) { // \??\$
+        if (len >= 4 && _is_separator(p[3]) && (len == 4 || !_is_separator(p[4]))  // \xx\$
+            && ((_is_separator(p[1]) && (p[2] == L'?' || p[2] == L'.'))            // \\?\$ or \\.\$
+            || (p[1] == L'?' && p[2] == L'?'))) {                                  // \??\$
                 return p + 3;
         }
 
         if (len >= 3 && _is_separator(p[1]) && !_is_separator(p[2])) { // \\server
-                const wchar_t *it1 = wcschr(p + 3, '\\');
-                const wchar_t *it2 = wcschr(p + 3, '/');
+                _fs_char_cit rtname = p + 3;
+                while (*rtname && !_is_separator(*rtname))
+                        ++rtname;
 
-                return min(it1, it2);
+                return rtname;
         }
 #endif // _WIN32
 
@@ -1152,17 +1178,8 @@ _fs_char_cit _find_extension(fs_cpath p, _fs_char_cit *extend)
 
 fs_bool _win32_is_drive(fs_cpath p)
 {
-        unsigned int value;
-        memcpy(&value, p, sizeof(value));
-
-        value &= 0xFFFFFFDFu;
-        value -= ((unsigned int)(L':') << (sizeof(wchar_t) * CHAR_BIT)) | L'A';
-        return value < 26;
-}
-
-fs_bool _win32_is_drive_prefix_with_slash_slash_question(fs_cpath p)
-{
-        return wcslen(p) >= 6 && wcsncmp(p, L"\\\\?\\", 4) == 0 && _win32_is_drive(p + 4);
+        const wchar_t first = p[0] | (L'a' - L'A');
+        return first >= L'a' && first <= L'z' && p[1] == L':';
 }
 
 fs_bool _win32_relative_path_contains_root_name(fs_cpath p) {
@@ -1740,7 +1757,7 @@ _fs_stat _win32_get_file_stat(fs_cpath p, _fs_stats_flag flags, fs_error_code *e
                         }
 
                         WIN32_FIND_DATAW fdata;
-                        const HANDLE handle = _find_first(p, &fdata, FS_FALSE, ec);
+                        const HANDLE handle = _find_first(p, &fdata, FS_FALSE, FS_FALSE, ec);
                         if (_FS_IS_ERROR_SET(ec))
                                 return (_fs_stat){0};
                         _win32_find_close(handle);
@@ -2018,37 +2035,9 @@ int _posix_statvfs(const char *name, struct statvfs *st)
 
 #pragma region posix_utils
 
-fs_file_type _posix_get_file_type(const struct stat *st)
-{
-#ifdef S_ISREG
-        if (S_ISREG(st->st_mode))
-                return fs_file_type_regular;
-        if (S_ISDIR(st->st_mode))
-                return fs_file_type_directory;
-        if (S_ISCHR(st->st_mode))
-                return fs_file_type_character;
-        if (S_ISBLK(st->st_mode))
-                return fs_file_type_block;
-        if (S_ISFIFO(st->st_mode))
-                return fs_file_type_fifo;
-#ifdef S_ISLNK
-        if (S_ISLNK(st->st_mode))
-                return fs_file_type_symlink;
-#endif // !S_ISLNK
-#ifdef S_ISSOCK
-        if (S_ISSOCK(st->st_mode))
-                return fs_file_type_socket;
-#endif // S_ISSOCK
-#else // S_ISREG
-        (void)st;
-#endif // !S_ISREG
-
-        return fs_file_type_unknown;
-}
-
 fs_bool _posix_create_dir(fs_cpath p, fs_perms perms, fs_error_code *ec) {
         if (_posix_mkdir(p, perms)) {
-                if (errno != EEXIST)
+                if (errno != fs_posix_error_file_exists)
                         _FS_SYSTEM_ERROR(ec, errno);
                 return FS_FALSE;
         }
@@ -2162,8 +2151,13 @@ fs_bool _posix_copy_file_range(int in, int out, size_t len, fs_error_code *ec)
         // cross-fs copy_file_range
         // ENOENT: undocumented, can arise with CIFS
         // ENOSYS: unsupported by kernel or blocked by seccomp
-        if (err != EINVAL && err != ENOTSUP && err != EOPNOTSUPP && err != ETXTBSY
-            && err != EXDEV && err != ENOENT && err != ENOSYS) {
+        if (err != fs_posix_error_invalid_argument
+            && err != fs_posix_error_operation_not_supported
+            && err != fs_posix_error_operation_not_supported_on_socket
+            && err != fs_posix_error_text_file_busy
+            && err != fs_posix_error_invalid_cross_device_link
+            && err != fs_posix_error_no_such_file_or_directory
+            && err != fs_posix_error_function_not_implemented) {
                 _FS_SYSTEM_ERROR(ec, err);
             }
 
@@ -2186,7 +2180,8 @@ fs_bool _linux_sendfile(int in, int out, size_t len, fs_error_code *ec) {
         lseek(out, 0, SEEK_SET);
         const int err = errno;
 
-        if (err != ENOSYS && err != EINVAL)
+        if (err != fs_posix_error_function_not_implemented
+            && err != fs_posix_error_invalid_argument)
                 _FS_SYSTEM_ERROR(ec, err);
 
         return FS_FALSE;
@@ -2291,7 +2286,7 @@ fs_path fs_canonical(fs_cpath p, fs_error_code *ec)
         if (kind == _fs_path_kind_Dos) {
                 wchar_t *output = buf;
 
-                if (_win32_is_drive_prefix_with_slash_slash_question(buf)) {
+                if (wcsncmp(p, L"\\\\?\\", 4) == 0 && _win32_is_drive(p + 4)) {
                         output += 4;
                 } else if (wcsncmp(buf, L"\\\\?\\UNC\\", 8) == 0) {
                         output[6] = L'\\';
@@ -3131,31 +3126,15 @@ deref:
 
         return out;
 #else // _WIN32
-        fs_file_status s1;
         struct stat st1;
-        if (stat(p1, &st1) == 0) {
-                s1 = _make_status(&st1, ec);
-                if (_FS_IS_ERROR_SET(ec))
-                        return FS_FALSE;
-        } else if (errno == ENOENT || errno == ENOTDIR) {
-                s1.type = fs_file_type_not_found;
-        } else {
-                _FS_SYSTEM_ERROR(ec, errno);
+        fs_file_status s1 = _status(p1, &st1, ec);
+        if (_FS_IS_ERROR_SET(ec))
                 return FS_FALSE;
-        }
 
-        fs_file_status s2;
         struct stat st2;
-        if (stat(p2, &st2) == 0) {
-                s2 = _make_status(&st2, ec);
-                if (_FS_IS_ERROR_SET(ec))
-                        return FS_FALSE;
-        } else if (errno == ENOENT || errno == ENOTDIR) {
-                s2.type = fs_file_type_not_found;
-        } else {
-                _FS_SYSTEM_ERROR(ec, errno);
+        fs_file_status s2 = _status(p2, &st2, ec);
+        if (_FS_IS_ERROR_SET(ec))
                 return FS_FALSE;
-        }
 
         if (!_exists_t(s1.type) || !_exists_t(s2.type)) {
                 _FS_CFS_ERROR(ec, fs_err_no_such_file_or_directory);
@@ -4394,7 +4373,8 @@ fs_path fs_path_lexically_relative(fs_cpath p, fs_cpath base, fs_error_code *ec)
                 goto defer;
         }
 
-        const ptrdiff_t brdist = _has_root_name(base, brtnend) + _has_root_dir(brtnend, brtdend);
+        const ptrdiff_t brdist = _has_root_name(base, brtnend)
+                + _has_root_dir(brtnend, brtdend);
         while (bdist < brdist) {
                 fs_path_iter_next(&bit);
                 ++bdist;
@@ -4812,12 +4792,12 @@ fs_path_iter fs_path_begin(fs_cpath p, fs_error_code *ec)
         const _fs_char_cit rtnend = _find_root_name_end(p);
 
         _fs_char_cit fend;
-        if (p == rtnend) {
+        if (!_has_root_name(p, rtnend)) {
                 _fs_char_cit rtdend = rtnend;
                 while (*rtnend && _is_separator(*rtdend))
                         ++rtdend;
 
-                if (p == rtdend) {
+                if (!_has_root_dir(rtnend, rtdend)) {
                         fend = rtdend;
                         while (*fend && !_is_separator(*fend))
                                 ++fend;
@@ -4854,13 +4834,11 @@ void fs_path_iter_next(fs_path_iter *it)
         const _fs_char_cit last = it->begin + _FS_STR(len, it->begin);
 
         if (it->pos == it->begin) {
-                it->pos                  += len;
                 const _fs_char_cit rtnend = _find_root_name_end(it->begin);
-                _fs_char_cit rtdend       = rtnend;
-                while (*rtdend && _is_separator(*rtdend))
-                        ++rtdend;
+                const _fs_char_cit rtdend = _find_root_directory_end(rtnend);
 
-                if (it->begin != rtnend && rtnend != rtdend) {
+                it->pos += len;
+                if (_has_root_dir(rtnend, rtdend) && it->begin != rtnend) {
                         free(FS_DEREF_PATH_ITER(*it));
                         FS_DEREF_PATH_ITER(*it) = _dupe_string(rtnend, rtdend);
                         return;
@@ -4954,22 +4932,10 @@ fs_dir_iter fs_directory_iterator_opt(fs_cpath p, fs_directory_options options, 
 
         const fs_bool skipdenied = _FS_ANY_FLAG_SET(options, fs_directory_options_skip_permission_denied);
 
-#ifdef _WIN32
-        const fs_path sp = malloc((wcslen(p) + 3) * sizeof(wchar_t));
-        wcscpy(sp, p);
-        wcscat(sp, L"\\*");
-#else // _WIN32
-        const fs_cpath sp = p;
-#endif // !_WIN32
-
         _fs_dir_entry entry;
-        const _fs_dir dir = _find_first(sp, &entry, skipdenied, ec);
+        const _fs_dir dir = _find_first(p, &entry, skipdenied, FS_TRUE, ec);
         if (_FS_IS_ERROR_SET(ec))
                 return (fs_dir_iter){0};
-
-#ifdef _WIN32
-        free(sp);
-#endif // _WIN32
 
         int alloc = 4;
         int count = 0;
