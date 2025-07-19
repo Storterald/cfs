@@ -11,6 +11,12 @@ static fs_error_code _fs_internal_error = {0};
 #include <windows.h>
 #include <shlobj.h> // SHCreateDirectoryExW
 
+#if defined(_WIN32_WINNT) && _WIN32_WINNT >= 0x0600
+#define _FS_WINDOWS_VISTA
+#define _FS_FILE_END_OF_FILE_AVAILABLE
+#define _FS_SYMLINKS_SUPPORTED
+#endif // _WIN32_WINNT && _WIN32_WINNT >= 0x600
+
 #define _FS_UNIX_EPOCH_TO_FILETIME_EPOCH 116444736000000000ULL
 
 #define _FS_PREF(s)           L##s
@@ -38,7 +44,7 @@ typedef enum _fs_access_rights {
 
         _fs_access_rights_File_generic_write = STANDARD_RIGHTS_WRITE
                 | FILE_WRITE_DATA | FILE_WRITE_ATTRIBUTES
-                | FILE_WRITE_EA | FILE_APPEND_DATA | SYNCHRONIZE
+                | FILE_WRITE_EA   | FILE_APPEND_DATA      | SYNCHRONIZE
 } _fs_access_rights;
 
 typedef enum _fs_file_flags {
@@ -100,9 +106,7 @@ typedef struct _fs_stat {
 
 } _fs_stat;
 
-#ifdef CreateSymbolicLink
-#define _FS_SYMLINKS_SUPPORTED
-
+#ifdef _FS_SYMLINKS_SUPPORTED
 typedef enum _fs_symbolic_link_flags {
         _fs_symbolic_link_flag_None                      = 0x0,
         _fs_symbolic_link_flag_Directory                 = SYMBOLIC_LINK_FLAG_DIRECTORY,
@@ -139,7 +143,7 @@ typedef struct _fs_reparse_data_buffer {
 typedef struct _fs_symbolic_link_reparse_buffer _fs_symbolic_link_reparse_buffer;
 typedef struct _fs_mount_point_reparse_buffer   _fs_mount_point_reparse_buffer;
 typedef struct _fs_generic_reparse_buffer       _fs_generic_reparse_buffer;
-#endif // CreateSymbolicLink
+#endif // _FS_SYMLINKS_SUPPORTED
 #else // _WIN32
 #include <sys/statvfs.h>
 #include <sys/types.h>
@@ -239,54 +243,54 @@ do {                                            \
 do {                                                    \
         (ec)->type = fs_error_type_cfs;                 \
         (ec)->code = e;                                 \
-        (ec)->msg = _fs_error_string((ec)->type, e);    \
+        (ec)->msg  = _fs_error_string((ec)->type, e);   \
 } while (FS_FALSE)
 
 #define _FS_SYSTEM_ERROR(ec, e)                         \
 do {                                                    \
         (ec)->type = fs_error_type_system;              \
         (ec)->code = e;                                 \
-        (ec)->msg = _fs_error_string((ec)->type, e);    \
+        (ec)->msg  = _fs_error_string((ec)->type, e);   \
 } while (FS_FALSE)
 
 #ifndef NDEBUG
-#define _FS_IS_X_FOO_DECL(what)                                 \
-fs_bool fs_is_##what(fs_cpath p, fs_error_code *ec)             \
-{                                                               \
-        _FS_CLEAR_ERROR_CODE(ec);                               \
-                                                                \
-        if (!p) {                                               \
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);     \
-                return FS_FALSE;                                \
-        }                                                       \
-                                                                \
-        if (_FS_IS_EMPTY(p)) {                                  \
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);     \
-                return FS_FALSE;                                \
-        }                                                       \
-                                                                \
-        const fs_file_status status = fs_status(p, ec);         \
-        if (_FS_IS_ERROR_SET(ec))                               \
-                return FS_FALSE;                                \
-                                                                \
-        return fs_is_##what##_s(status);                        \
+#define _FS_IS_X_FOO_DECL(what)                                         \
+fs_bool fs_is_##what(fs_cpath p, fs_error_code *ec)                     \
+{                                                                       \
+        _FS_CLEAR_ERROR_CODE(ec);                                       \
+                                                                        \
+        if (!p) {                                                       \
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);       \
+                return FS_FALSE;                                        \
+        }                                                               \
+                                                                        \
+        if (_FS_IS_EMPTY(p)) {                                          \
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);       \
+                return FS_FALSE;                                        \
+        }                                                               \
+                                                                        \
+        const fs_file_status status = fs_status(p, ec);                 \
+        if (_FS_IS_ERROR_SET(ec))                                       \
+                return FS_FALSE;                                        \
+                                                                        \
+        return fs_is_##what##_s(status);                                \
 }
 #else // !NDEBUG
-#define _FS_IS_X_FOO_DECL(what)                                 \
-fs_bool fs_is_##what(fs_cpath p, fs_error_code *ec)             \
-{                                                               \
-        _FS_CLEAR_ERROR_CODE(ec);                               \
-                                                                \
-        if (_FS_IS_EMPTY(p)) {                                  \
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);     \
-                return FS_FALSE;                                \
-        }                                                       \
-                                                                \
-        const fs_file_status status = fs_status(p, ec);         \
-        if (_FS_IS_ERROR_SET(ec))                               \
-                return FS_FALSE;                                \
-                                                                \
-        return fs_is_##what##_s(status);                        \
+#define _FS_IS_X_FOO_DECL(what)                                         \
+fs_bool fs_is_##what(fs_cpath p, fs_error_code *ec)                     \
+{                                                                       \
+        _FS_CLEAR_ERROR_CODE(ec);                                       \
+                                                                        \
+        if (_FS_IS_EMPTY(p)) {                                          \
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);       \
+                return FS_FALSE;                                        \
+        }                                                               \
+                                                                        \
+        const fs_file_status status = fs_status(p, ec);                 \
+        if (_FS_IS_ERROR_SET(ec))                                       \
+                return FS_FALSE;                                        \
+                                                                        \
+        return fs_is_##what##_s(status);                                \
 }
 #endif // NDEBUG
 
@@ -367,23 +371,15 @@ static HANDLE _win32_create_file(LPCWSTR name, DWORD access, DWORD share, LPSECU
 static HANDLE _win32_find_first(LPCWSTR name, LPWIN32_FIND_DATAW data);
 _FS_FORCE_INLINE static BOOL _win32_find_next(HANDLE handle, LPWIN32_FIND_DATAW data);
 _FS_FORCE_INLINE static BOOL _win32_find_close(HANDLE handle);
-_FS_FORCE_INLINE static DWORD _win32_get_final_path_name_by_handle(HANDLE handle, LPWSTR buf, DWORD len, DWORD flags);
 static DWORD _win32_get_full_path_name(LPCWSTR name, DWORD len, LPWSTR buf, LPWSTR *filepart);
 static BOOL _win32_close_handle(HANDLE handle);
 static DWORD _win32_get_file_attributes(LPCWSTR name);
-#ifdef _FS_SYMLINKS_SUPPORTED
-_FS_FORCE_INLINE static BOOL _win32_get_file_information_by_handle_ex(HANDLE handle, FILE_INFO_BY_HANDLE_CLASS class, LPVOID buf, DWORD size);
-_FS_FORCE_INLINE static BOOL _win32_set_file_information_by_handle(HANDLE handle, FILE_INFO_BY_HANDLE_CLASS class, LPVOID buf, DWORD size);
-#endif // _FS_SYMLINKS_SUPPORTED
 static BOOL _win32_set_file_attributes(LPCWSTR name, DWORD attributes);
 static BOOL _win32_get_file_attributes_ex(LPCWSTR name, GET_FILEEX_INFO_LEVELS level, LPVOID info);
 static BOOL _win32_copy_file(LPCWSTR str, LPCWSTR dst, BOOL fail);
 static BOOL _win32_create_directory(LPCWSTR name, LPSECURITY_ATTRIBUTES sa);
 _FS_FORCE_INLINE static int _win32_sh_create_directory_ex_w(HWND window, LPCWSTR name, const SECURITY_ATTRIBUTES *sa);
 static BOOL _win32_create_hard_link(LPCWSTR link, LPCWSTR target, LPSECURITY_ATTRIBUTES sa);
-#ifdef _FS_SYMLINKS_SUPPORTED
-static BOOLEAN _win32_create_symbolic_link(LPCWSTR link, LPCWSTR target, DWORD flags);
-#endif // _FS_SYMLINKS_SUPPORTED
 _FS_FORCE_INLINE static DWORD _win32_get_current_directory(DWORD len, LPWSTR buf);
 static BOOL _win32_set_current_directory(LPCWSTR name);
 _FS_FORCE_INLINE static BOOL _win32_get_file_information_by_handle(HANDLE handle, LPBY_HANDLE_FILE_INFORMATION info);
@@ -400,6 +396,14 @@ static BOOL _win32_get_volume_path_name(LPCWSTR name, LPWSTR buf, DWORD len);
 static BOOL _win32_get_disk_free_space_ex(LPCWSTR name, PULARGE_INTEGER available, PULARGE_INTEGER total, PULARGE_INTEGER free);
 _FS_FORCE_INLINE static DWORD _win32_get_temp_path(DWORD len, LPWSTR buf);
 _FS_FORCE_INLINE static BOOL _win32_device_io_control(HANDLE handle, DWORD code, LPVOID inbuf, DWORD insize, LPVOID outbuf, DWORD outsize, LPDWORD bytes, LPOVERLAPPED overlapped);
+#ifdef _FS_WINDOWS_VISTA
+_FS_FORCE_INLINE static BOOL _win32_get_file_information_by_handle_ex(HANDLE handle, FILE_INFO_BY_HANDLE_CLASS class, LPVOID buf, DWORD size);
+_FS_FORCE_INLINE static BOOL _win32_set_file_information_by_handle(HANDLE handle, FILE_INFO_BY_HANDLE_CLASS class, LPVOID buf, DWORD size);
+_FS_FORCE_INLINE static DWORD _win32_get_final_path_name_by_handle(HANDLE handle, LPWSTR buf, DWORD len, DWORD flags);
+#endif // _FS_WINDOWS_VISTA
+#ifdef _FS_SYMLINKS_SUPPORTED
+static BOOLEAN _win32_create_symbolic_link(LPCWSTR link, LPCWSTR target, DWORD flags);
+#endif // _FS_SYMLINKS_SUPPORTED
 #pragma endregion win32_api_wrappers
 
 #pragma region win32_utils
@@ -479,24 +483,24 @@ char *_fs_error_string(fs_error_type type, uint32_t e)
         case fs_error_type_none:
                 break;
         case fs_error_type_cfs:
-                switch((fs_err)e) {
-                case fs_err_success:
+                switch((fs_cfs_error)e) {
+                case fs_cfs_error_success:
                         return "cfs error: success";
-                case fs_err_no_such_file_or_directory:
+                case fs_cfs_error_no_such_file_or_directory:
                         return "cfs error: no such file or directory";
-                case fs_err_file_exists:
+                case fs_cfs_error_file_exists:
                         return "cfs error: file already exists";
-                case fs_err_not_a_directory:
+                case fs_cfs_error_not_a_directory:
                         return "cfs error: iter is not a directory";
-                case fs_err_is_a_directory:
+                case fs_cfs_error_is_a_directory:
                         return "cfs error: item is a directory";
-                case fs_err_invalid_argument:
+                case fs_cfs_error_invalid_argument:
                         return "cfs error: invalid argument";
-                case fs_err_name_too_long:
+                case fs_cfs_error_name_too_long:
                         return "cfs error: name too long";
-                case fs_err_function_not_supported:
+                case fs_cfs_error_function_not_supported:
                         return "cfs error: function not supported";
-                case fs_err_loop:
+                case fs_cfs_error_loop:
                         return "cfs error: symlink loop";
                 }
                 break;
@@ -604,6 +608,8 @@ char *_fs_error_string(fs_error_type type, uint32_t e)
                         return "cfs posix error: filename too long";
                 case fs_posix_error_function_not_implemented:
                         return "cfs posix error: function not implemented";
+                case fs_posix_error_directory_not_empty:
+                        return "cfs posix error: directory not empty";
                 case fs_posix_error_destination_address_required:
                         return "cfs posix error: destination address required";
                 case fs_posix_error_too_many_levels_of_symbolic_links:
@@ -1186,12 +1192,12 @@ fs_bool _win32_relative_path_contains_root_name(fs_cpath p) {
         return FS_FALSE;
 }
 
-static LPWSTR _win32_prepend_unc(LPCWSTR path, fs_bool separate)
+LPWSTR _win32_prepend_unc(LPCWSTR path, fs_bool separate)
 {
         // The \\?\ prefix can only be added to absolute paths
         fs_error_code e;
         const fs_path abs = fs_absolute(path, &e);
-        if (e.code != fs_err_success)
+        if (e.code != fs_cfs_error_success)
                 return NULL;
 
         const size_t len = wcslen(abs) + 4 + separate;
@@ -1257,11 +1263,6 @@ BOOL _win32_find_close(HANDLE handle)
         return FindClose(handle);
 }
 
-DWORD _win32_get_final_path_name_by_handle(HANDLE handle, LPWSTR buf, DWORD len, DWORD flags)
-{
-        return GetFinalPathNameByHandleW(handle, buf, len, flags);
-}
-
 DWORD _win32_get_full_path_name(LPCWSTR name, DWORD len, LPWSTR buf, LPWSTR *filepart)
 {
         DWORD req       = GetFullPathNameW(name, len, buf, filepart);
@@ -1273,7 +1274,7 @@ DWORD _win32_get_full_path_name(LPCWSTR name, DWORD len, LPWSTR buf, LPWSTR *fil
         // added to a relative path we want the absolute of.
         fs_error_code e;
         fs_path cur = fs_current_path(&e);
-        if (e.code != fs_err_success)
+        if (e.code != fs_cfs_error_success)
                 return 0;
 
         fs_path_append_s(&cur, name, NULL);
@@ -1304,18 +1305,6 @@ DWORD _win32_get_file_attributes(LPCWSTR name)
         free(unc);
         return attrs;
 }
-
-#ifdef _FS_SYMLINKS_SUPPORTED
-BOOL _win32_get_file_information_by_handle_ex(HANDLE handle, FILE_INFO_BY_HANDLE_CLASS class, LPVOID buf, DWORD size)
-{
-        return GetFileInformationByHandleEx(handle, class, buf, size);
-}
-
-BOOL _win32_set_file_information_by_handle(HANDLE handle, FILE_INFO_BY_HANDLE_CLASS class, LPVOID buf, DWORD size)
-{
-        return SetFileInformationByHandle(handle, class, buf, size);
-}
-#endif // _FS_SYMLINKS_SUPPORTED
 
 BOOL _win32_set_file_attributes(LPCWSTR name, DWORD attributes)
 {
@@ -1415,38 +1404,6 @@ BOOL _win32_create_hard_link(LPCWSTR link, LPCWSTR target, LPSECURITY_ATTRIBUTES
         free(unc2);
         return ret;
 }
-
-#ifdef _FS_SYMLINKS_SUPPORTED
-BOOLEAN _win32_create_symbolic_link(LPCWSTR link, LPCWSTR target, DWORD flags)
-{
-        fs_error_code e;
-        const fs_path abs = fs_absolute(target, &e);
-        if (e.code != fs_err_success)
-                return 0;
-
-        BOOLEAN ret     = CreateSymbolicLinkW(link, abs, flags);
-        const DWORD err = GetLastError();
-
-        free(abs);
-        if (ret || !_FS_IS_ERROR_EXCEED(err))
-                return ret;
-
-        const LPWSTR unc1 = _win32_prepend_unc(link, FS_FALSE);
-        if (!unc1)
-                return ret;
-
-        const LPWSTR unc2 = _win32_prepend_unc(target, FS_FALSE);
-        if (!unc2) {
-                free(unc1);
-                return ret;
-        }
-
-        ret = CreateSymbolicLinkW(unc1, unc2, flags);
-        free(unc1);
-        free(unc2);
-        return ret;
-}
-#endif // _FS_SYMLINKS_SUPPORTED
 
 DWORD _win32_get_current_directory(DWORD len, LPWSTR buf)
 {
@@ -1601,6 +1558,55 @@ BOOL _win32_device_io_control(HANDLE handle, DWORD code, LPVOID inbuf, DWORD ins
         return DeviceIoControl(handle, code, inbuf, insize, outbuf, outsize, bytes, overlapped);
 }
 
+#ifdef _FS_WINDOWS_VISTA
+BOOL _win32_get_file_information_by_handle_ex(HANDLE handle, FILE_INFO_BY_HANDLE_CLASS class, LPVOID buf, DWORD size)
+{
+        return GetFileInformationByHandleEx(handle, class, buf, size);
+}
+
+BOOL _win32_set_file_information_by_handle(HANDLE handle, FILE_INFO_BY_HANDLE_CLASS class, LPVOID buf, DWORD size)
+{
+        return SetFileInformationByHandle(handle, class, buf, size);
+}
+
+DWORD _win32_get_final_path_name_by_handle(HANDLE handle, LPWSTR buf, DWORD len, DWORD flags)
+{
+        return GetFinalPathNameByHandleW(handle, buf, len, flags);
+}
+#endif // _FS_WINDOWS_VISTA
+
+#ifdef _FS_SYMLINKS_SUPPORTED
+BOOLEAN _win32_create_symbolic_link(LPCWSTR link, LPCWSTR target, DWORD flags)
+{
+        fs_error_code e;
+        const fs_path abs = fs_absolute(target, &e);
+        if (e.code != fs_cfs_error_success)
+                return 0;
+
+        BOOLEAN ret     = CreateSymbolicLinkW(link, abs, flags);
+        const DWORD err = GetLastError();
+
+        free(abs);
+        if (ret || !_FS_IS_ERROR_EXCEED(err))
+                return ret;
+
+        const LPWSTR unc1 = _win32_prepend_unc(link, FS_FALSE);
+        if (!unc1)
+                return ret;
+
+        const LPWSTR unc2 = _win32_prepend_unc(target, FS_FALSE);
+        if (!unc2) {
+                free(unc1);
+                return ret;
+        }
+
+        ret = CreateSymbolicLinkW(unc1, unc2, flags);
+        free(unc1);
+        free(unc2);
+        return ret;
+}
+#endif // _FS_SYMLINKS_SUPPORTED
+
 #pragma endregion win32_api_wrappers
 
 #pragma region win32_utils
@@ -1622,34 +1628,34 @@ fs_path _win32_get_final_path(fs_cpath p, _fs_path_kind *pkind, fs_error_code *e
 {
         _fs_path_kind kind = _fs_path_kind_Dos;
 
-#ifdef _FS_SYMLINKS_SUPPORTED
+#ifdef _FS_WINDOWS_VISTA
         const HANDLE hFile = _win32_get_handle(
                 p, _fs_access_rights_File_read_attributes,
                 _fs_file_flags_Backup_semantics, ec);
         if (_FS_IS_ERROR_SET(ec))
                 return NULL;
-#endif // _FS_SYMLINKS_SUPPORTED
+#endif // _FS_WINDOWS_VISTA
 
         DWORD len   = MAX_PATH;
         fs_path buf = malloc(len * sizeof(wchar_t));
 
         for (;;) {
-#ifdef _FS_SYMLINKS_SUPPORTED
+#ifdef _FS_WINDOWS_VISTA
                 DWORD req = _win32_get_final_path_name_by_handle(hFile, buf, MAX_PATH, kind);
-#else // _FS_SYMLINKS_SUPPORTED
+#else // _FS_WINDOWS_VISTA
                 DWORD req = _win32_get_full_path_name(p, len, buf, NULL);
-#endif // !_FS_SYMLINKS_SUPPORTED
+#endif // !_FS_WINDOWS_VISTA
 
                 if (len == 0) {
                         const DWORD err = GetLastError();
-#ifdef _FS_SYMLINKS_SUPPORTED
+#ifdef _FS_WINDOWS_VISTA
                         if (err == fs_win_error_path_not_found && kind == _fs_path_kind_Dos) {
                                 kind = _fs_path_kind_Nt;
                                 continue;
                         }
 
                         _win32_close_handle(hFile);
-#endif // _FS_SYMLINKS_SUPPORTED
+#endif // _FS_WINDOWS_VISTA
 
                         _FS_SYSTEM_ERROR(ec, err);
                         return NULL;
@@ -1664,9 +1670,9 @@ fs_path _win32_get_final_path(fs_cpath p, _fs_path_kind *pkind, fs_error_code *e
                 }
         }
 
-#ifdef _FS_SYMLINKS_SUPPORTED
+#ifdef _FS_WINDOWS_VISTA
         _win32_close_handle(hFile);
-#endif // _FS_SYMLINKS_SUPPORTED
+#endif // _FS_WINDOWS_VISTA
 
         *pkind = kind;
         return buf;
@@ -1733,7 +1739,7 @@ _fs_stat _win32_get_file_stat(fs_cpath p, _fs_stats_flag flags, fs_error_code *e
 
         flags &= ~_fs_stats_flag_Follow_symlinks;
         if (follow && _FS_ANY_FLAG_SET(flags, _fs_stats_flag_Reparse_tag)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return (_fs_stat){0};
         }
 
@@ -1816,7 +1822,7 @@ defer:
 #endif // !_FS_SYMLINKS_SUPPORTED
 
         if (flags != _fs_stats_flag_None)
-                _FS_CFS_ERROR(ec, fs_err_function_not_supported);
+                _FS_CFS_ERROR(ec, fs_cfs_error_function_not_supported);
 
         return out;
 }
@@ -2185,13 +2191,13 @@ fs_path fs_absolute(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 
@@ -2244,19 +2250,19 @@ fs_path fs_canonical(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 
         if (!fs_exists(p, ec) || _FS_IS_ERROR_SET(ec)) {
                 if (!_FS_IS_ERROR_SET(ec))
-                        _FS_CFS_ERROR(ec, fs_err_no_such_file_or_directory);
+                        _FS_CFS_ERROR(ec, fs_cfs_error_no_such_file_or_directory);
                 return NULL;
         }
 
@@ -2318,13 +2324,13 @@ fs_path fs_weakly_canonical(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 
@@ -2392,13 +2398,13 @@ fs_path fs_relative(fs_cpath p, fs_cpath base, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p || !base) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p) || _FS_IS_EMPTY(base)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 
@@ -2428,13 +2434,13 @@ fs_path fs_proximate(fs_cpath p, fs_cpath base, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p || !base) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p) || _FS_IS_EMPTY(base)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 
@@ -2469,13 +2475,13 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
 
 #ifndef NDEBUG
         if (!from || !to) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(from) || _FS_IS_EMPTY(to)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 
@@ -2495,7 +2501,7 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
         }
 
         if (!_exists_t(ftype)) {
-                _FS_CFS_ERROR(ec, fs_err_no_such_file_or_directory);
+                _FS_CFS_ERROR(ec, fs_cfs_error_no_such_file_or_directory);
                 return;
         }
 
@@ -2510,7 +2516,7 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
         if (_exists_t(ttype)) {
                 if (fs_equivalent(from, to, ec) || _FS_IS_ERROR_SET(ec)) {
                         if (!_FS_IS_ERROR_SET(ec))
-                                _FS_CFS_ERROR(ec, fs_err_file_exists);
+                                _FS_CFS_ERROR(ec, fs_cfs_error_file_exists);
 
                         return;
                 }
@@ -2547,12 +2553,12 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
         const fs_bool fother = _is_other_t(ftype);
         const fs_bool tother = _is_other_t(ttype);
         if (fother || tother) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 
         if (_is_directory_t(ftype) && _is_regular_file_t(ttype)) {
-                _FS_CFS_ERROR(ec, fs_err_is_a_directory);
+                _FS_CFS_ERROR(ec, fs_cfs_error_is_a_directory);
                 return;
         }
 
@@ -2566,7 +2572,7 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
                         return;
                 }
 
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 #endif // _FS_SYMLINKS_SUPPORTED
@@ -2602,7 +2608,7 @@ void fs_copy_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_error_c
 
         if (_is_directory_t(ftype)) {
                 if (_FS_ANY_FLAG_SET(options, fs_copy_options_create_symlinks)) {
-                        _FS_CFS_ERROR(ec, fs_err_is_a_directory);
+                        _FS_CFS_ERROR(ec, fs_cfs_error_is_a_directory);
                         return;
                 }
 
@@ -2645,13 +2651,13 @@ void fs_copy_file_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_er
 
 #ifndef NDEBUG
         if (!from || !to) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(from) || _FS_IS_EMPTY(to)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 
@@ -2665,24 +2671,24 @@ void fs_copy_file_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_er
                 return;
 
         if (!_is_regular_file_t(ftype)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 
         if (_exists_t(ttype)) {
                 if (options == fs_copy_options_none) {
-                        _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                        _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                         return;
                 }
 
                 if (!_is_regular_file_t(ttype)) {
-                        _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                        _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                         return;
                 }
 
                 if (fs_equivalent(from, to, ec) || _FS_IS_ERROR_SET(ec)) {
                         if (!_FS_IS_ERROR_SET(ec))
-                                _FS_CFS_ERROR(ec, fs_err_file_exists);
+                                _FS_CFS_ERROR(ec, fs_cfs_error_file_exists);
 
                         return;
                 }
@@ -2694,7 +2700,7 @@ void fs_copy_file_opt(fs_cpath from, fs_cpath to, fs_copy_options options, fs_er
                         goto copy;
 
                 if (!_FS_ANY_FLAG_SET(options, fs_copy_options_update_existing)) {
-                        _FS_CFS_ERROR(ec, fs_err_file_exists);
+                        _FS_CFS_ERROR(ec, fs_cfs_error_file_exists);
                         return;
                 }
 
@@ -2726,7 +2732,7 @@ void fs_copy_symlink(fs_cpath from, fs_cpath to, fs_error_code *ec)
 #ifdef _FS_SYMLINKS_SUPPORTED
 #ifndef NDEBUG
         if (!from || !to) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 #endif // !NDEBUG
@@ -2738,7 +2744,7 @@ void fs_copy_symlink(fs_cpath from, fs_cpath to, fs_error_code *ec)
         fs_create_symlink(p, to, ec); // fs_create_symlink == fs_create_directory_symlink
         free((fs_path)p);
 #else // _FS_SYMLINKS_SUPPORTED
-        _FS_CFS_ERROR(ec, fs_err_function_not_supported);
+        _FS_CFS_ERROR(ec, fs_cfs_error_function_not_supported);
 #endif // !_FS_SYMLINKS_SUPPORTED
 }
 
@@ -2748,13 +2754,13 @@ fs_bool fs_create_directory(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 
@@ -2777,13 +2783,13 @@ fs_bool fs_create_directory_cp(fs_cpath p, fs_cpath existing_p, fs_error_code *e
 
 #ifndef NDEBUG
         if (!p || !existing_p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p) || _FS_IS_EMPTY(existing_p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 
@@ -2811,13 +2817,13 @@ fs_bool fs_create_directories(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 
@@ -2874,7 +2880,7 @@ fs_bool fs_create_directories(fs_cpath p, fs_error_code *ec)
 
                 if (existing && ((existing = fs_exists_s(stat)))) {
                         if (!fs_is_directory_s(stat)) {
-                                _FS_CFS_ERROR(ec, fs_err_not_a_directory);
+                                _FS_CFS_ERROR(ec, fs_cfs_error_not_a_directory);
                                 goto defer;
                         }
                 } else {
@@ -2898,19 +2904,19 @@ void fs_create_hard_link(fs_cpath target, fs_cpath link, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!target || !link) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(target) || _FS_IS_EMPTY(link)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 
         if (fs_is_directory(target, ec) || _FS_IS_ERROR_SET(ec)) {
                 if (!_FS_IS_ERROR_SET(ec))
-                        _FS_CFS_ERROR(ec, fs_err_is_a_directory);
+                        _FS_CFS_ERROR(ec, fs_cfs_error_is_a_directory);
                 return;
         }
 
@@ -2930,13 +2936,13 @@ void fs_create_symlink(fs_cpath target, fs_cpath link, fs_error_code *ec)
 #ifdef _FS_SYMLINKS_SUPPORTED
 #ifndef NDEBUG
         if (!target || !link) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(target) || _FS_IS_EMPTY(link)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 
@@ -2952,7 +2958,7 @@ void fs_create_symlink(fs_cpath target, fs_cpath link, fs_error_code *ec)
                 _FS_SYSTEM_ERROR(ec, errno);
 #endif // !_WIN32
 #else // _FS_SYMLINKS_SUPPORTED
-        _FS_CFS_ERROR(ec, fs_err_function_not_supported);
+        _FS_CFS_ERROR(ec, fs_cfs_error_function_not_supported);
 #endif // !_FS_SYMLINKS_SUPPORTED
 }
 
@@ -3003,13 +3009,13 @@ void fs_set_current_path(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 
@@ -3033,13 +3039,13 @@ fs_bool fs_exists(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 
@@ -3053,13 +3059,13 @@ fs_bool fs_equivalent(fs_cpath p1, fs_cpath p2, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p1 || !p2) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p1) || _FS_IS_EMPTY(p2)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 
@@ -3117,7 +3123,7 @@ deref:
                 return FS_FALSE;
 
         if (!_exists_t(s1.type) || !_exists_t(s2.type)) {
-                _FS_CFS_ERROR(ec, fs_err_no_such_file_or_directory);
+                _FS_CFS_ERROR(ec, fs_cfs_error_no_such_file_or_directory);
                 return FS_FALSE;
         }
 
@@ -3133,19 +3139,19 @@ uintmax_t fs_file_size(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return (uintmax_t)-1;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return (uintmax_t)-1;
         }
 
         if (!fs_is_regular_file(p, ec) || _FS_IS_ERROR_SET(ec)) {
                 if (!_FS_IS_ERROR_SET(ec))
-                        _FS_CFS_ERROR(ec, fs_err_is_a_directory);
+                        _FS_CFS_ERROR(ec, fs_cfs_error_is_a_directory);
                 return (uintmax_t)-1;
         }
 
@@ -3183,19 +3189,19 @@ uintmax_t fs_hard_link_count(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return (uintmax_t)-1;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return (uintmax_t)-1;
         }
 
         if (!fs_is_regular_file(p, ec) || _FS_IS_ERROR_SET(ec)) {
                 if (!_FS_IS_ERROR_SET(ec))
-                        _FS_CFS_ERROR(ec, fs_err_is_a_directory);
+                        _FS_CFS_ERROR(ec, fs_cfs_error_is_a_directory);
                 return (uintmax_t)-1;
         }
 
@@ -3233,13 +3239,13 @@ fs_file_time_type fs_last_write_time(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return (fs_file_time_type){0};
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return (fs_file_time_type){0};
         }
 
@@ -3304,18 +3310,18 @@ void fs_set_last_write_time(fs_cpath p, fs_file_time_type new_time, fs_error_cod
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 
         if (new_time.nanoseconds >= 1000000000) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 
@@ -3379,13 +3385,13 @@ void fs_permissions_opt(fs_cpath p, fs_perms prms, fs_perm_options opts, fs_erro
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 
@@ -3394,7 +3400,7 @@ void fs_permissions_opt(fs_cpath p, fs_perms prms, fs_perm_options opts, fs_erro
         const fs_bool remove   = _FS_ANY_FLAG_SET(opts, fs_perm_options_remove);
         const fs_bool nofollow = _FS_ANY_FLAG_SET(opts, fs_perm_options_nofollow);
         if (replace + add + remove != 1)
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
 
         const fs_file_status st = nofollow ? fs_status(p, ec) : fs_symlink_status(p, ec);
         if (_FS_IS_ERROR_SET(ec))
@@ -3402,14 +3408,15 @@ void fs_permissions_opt(fs_cpath p, fs_perms prms, fs_perm_options opts, fs_erro
 
         prms &= fs_perms_mask;
 
+        const fs_perm_options follow = opts & fs_perm_options_nofollow;
         if (add) {
                 const fs_perms nprms = st.perms | (prms & fs_perms_mask);
-                fs_permissions_opt(p, nprms, fs_perm_options_replace, ec);
+                fs_permissions_opt(p, nprms, fs_perm_options_replace | follow, ec);
                 return;
         }
         if (remove) {
                 const fs_perms nprms = st.perms & ~(prms & fs_perms_mask);
-                fs_permissions_opt(p, nprms, fs_perm_options_replace, ec);
+                fs_permissions_opt(p, nprms, fs_perm_options_replace | follow, ec);
                 return;
         }
 
@@ -3423,7 +3430,7 @@ void fs_permissions_opt(fs_cpath p, fs_perms prms, fs_perm_options opts, fs_erro
                 _FS_SYSTEM_ERROR(ec, errno);
 #else // _FS_CHMODAT_AVAILABLE
         if (nofollow && fs_is_symlink_s(st))
-                _FS_CFS_ERROR(ec, fs_err_function_not_supported);
+                _FS_CFS_ERROR(ec, fs_cfs_error_function_not_supported);
         else if (_posix_chmod(p, (mode_t)prms))
                 _FS_SYSTEM_ERROR(ec, errno);
 #endif // !_FS_CHMODAT_AVAILABLE
@@ -3437,19 +3444,19 @@ fs_path fs_read_symlink(fs_cpath p, fs_error_code *ec)
 #ifdef _FS_SYMLINKS_SUPPORTED
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 
         if (!fs_is_symlink(p, ec) || _FS_IS_ERROR_SET(ec)) {
                 if (!_FS_IS_ERROR_SET(ec))
-                        _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                        _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
 
                 return NULL;
         }
@@ -3464,7 +3471,7 @@ fs_path fs_read_symlink(fs_cpath p, fs_error_code *ec)
                 return NULL;
         }
         if (size > PATH_MAX) {
-                _FS_CFS_ERROR(ec, fs_err_name_too_long);
+                _FS_CFS_ERROR(ec, fs_cfs_error_name_too_long);
                 return NULL;
         }
 
@@ -3472,7 +3479,7 @@ fs_path fs_read_symlink(fs_cpath p, fs_error_code *ec)
         return strdup(sbuf);
 #endif // !_WIN32
 #else // _FS_SYMLINKS_SUPPORTED
-        _FS_CFS_ERROR(ec, fs_err_function_not_supported);
+        _FS_CFS_ERROR(ec, fs_cfs_error_function_not_supported);
         return NULL;
 #endif // !_FS_SYMLINKS_SUPPORTED
 }
@@ -3483,13 +3490,13 @@ fs_bool fs_remove(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 
@@ -3519,13 +3526,13 @@ uintmax_t fs_remove_all(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return (uintmax_t)-1;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return (uintmax_t)-1;
         }
 
@@ -3570,13 +3577,13 @@ void fs_rename(fs_cpath old_p, fs_cpath new_p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!old_p || !new_p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(old_p) || _FS_IS_EMPTY(new_p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 
@@ -3595,24 +3602,24 @@ void fs_resize_file(fs_cpath p, uintmax_t size, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 
         if (size > INT64_MAX) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 
         if (!fs_is_regular_file(p, ec) || _FS_IS_ERROR_SET(ec)) {
                 if (!_FS_IS_ERROR_SET(ec))
-                        _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                        _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
 
                 return;
         }
@@ -3620,10 +3627,15 @@ void fs_resize_file(fs_cpath p, uintmax_t size, fs_error_code *ec)
 #ifdef _WIN32
         const HANDLE handle = _win32_get_handle(
                 p, _fs_access_rights_File_generic_write,
-                _fs_file_flags_Normal, ec);
+                _fs_file_flags_None, ec);
         if (_FS_IS_ERROR_SET(ec))
                 return;
 
+#ifdef _FS_FILE_END_OF_FILE_AVAILABLE
+        FILE_END_OF_FILE_INFO info = { .EndOfFile.QuadPart = (LONGLONG)size };
+        if (!_win32_set_file_information_by_handle(handle, FileEndOfFileInfo, &info, sizeof(FILE_END_OF_FILE_INFO)))
+                _FS_SYSTEM_ERROR(ec, GetLastError());
+#else // _FS_FILE_END_OF_FILE_AVAILABLE
         const LARGE_INTEGER off = { .QuadPart = (LONGLONG)size };
         if (fs_file_size(p, ec) > size) {
                 if (!_win32_set_file_pointer_ex(handle, off, NULL, FILE_BEGIN)) {
@@ -3651,10 +3663,12 @@ void fs_resize_file(fs_cpath p, uintmax_t size, fs_error_code *ec)
                 _FS_SYSTEM_ERROR(ec, GetLastError());
 
 defer:
+#endif // !_FS_FILE_END_OF_FILE_AVAILABLE
+
         _win32_close_handle(handle);
 #else // _WIN32
         if (size > (uintmax_t)_FS_OFF_MAX)
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
         else if (truncate(p, size))
                 _FS_SYSTEM_ERROR(ec, errno);
 #endif // !_WIN32
@@ -3666,13 +3680,13 @@ fs_space_info fs_space(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return (fs_space_info){0};
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return (fs_space_info){0};
         }
 
@@ -3731,13 +3745,13 @@ fs_file_status fs_status(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return (fs_file_status){0};
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return (fs_file_status){0};
         }
 
@@ -3751,13 +3765,13 @@ fs_file_status fs_symlink_status(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return (fs_file_status){0};
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return (fs_file_status){0};
         }
 
@@ -3830,13 +3844,13 @@ fs_bool fs_is_empty(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 
@@ -3891,13 +3905,13 @@ fs_bool fs_is_symlink(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 #endif // NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 
@@ -3923,7 +3937,7 @@ fs_path fs_path_append(fs_cpath p, fs_cpath other, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p || !other) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 #else // !NDEBUG
@@ -3942,7 +3956,7 @@ void fs_path_append_s(fs_path *pp, fs_cpath other, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!pp || !*pp || !other) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 #else // !NDEBUG
@@ -4000,7 +4014,7 @@ fs_path fs_path_concat(fs_cpath p, fs_cpath other, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p || !other) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 #else // !NDEBUG
@@ -4021,7 +4035,7 @@ void fs_path_concat_s(fs_path *pp, fs_cpath other, fs_error_code *ec)
 {
 #ifndef NDEBUG
         if (!pp || !*pp || !other) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 #else // !NDEBUG
@@ -4039,7 +4053,7 @@ void fs_path_clear(fs_path *pp, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!pp || !*pp) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 #else // !NDEBUG
@@ -4056,7 +4070,7 @@ void fs_path_make_preferred(fs_path *pp, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!pp || !*pp) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 #else // !NDEBUG
@@ -4074,13 +4088,13 @@ void fs_path_remove_filename(fs_path *pp, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!pp || !*pp) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 #endif // NDEBUG
 
         if (_FS_IS_EMPTY(*pp)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 
@@ -4095,13 +4109,13 @@ void fs_path_replace_filename(fs_path *pp, fs_cpath replacement, fs_error_code *
 
 #ifndef NDEBUG
         if (!pp || !*pp || !replacement) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(*pp)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 
@@ -4133,13 +4147,13 @@ void fs_path_replace_extension(fs_path *pp, fs_cpath replacement, fs_error_code 
 
 #ifndef NDEBUG
         if (!pp || !*pp || !replacement) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(*pp)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return;
         }
 
@@ -4204,7 +4218,7 @@ int fs_path_compare(fs_cpath p, fs_cpath other, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p || !other) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return 0;
         }
 #else // !NDEBUG
@@ -4236,7 +4250,7 @@ fs_path fs_path_lexically_normal(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 #else // !NDEBUG
@@ -4312,13 +4326,13 @@ fs_path fs_path_lexically_relative(fs_cpath p, fs_cpath base, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p || !base) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p) || _FS_IS_EMPTY(base)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 
@@ -4418,13 +4432,13 @@ fs_path fs_path_root_name(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 
@@ -4435,13 +4449,13 @@ fs_bool fs_path_has_root_name(fs_cpath p, fs_error_code *ec)
 {
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 
@@ -4454,13 +4468,13 @@ fs_path fs_path_root_directory(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 
@@ -4474,13 +4488,13 @@ fs_bool fs_path_has_root_directory(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 
@@ -4495,13 +4509,13 @@ fs_path fs_path_root_path(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 
@@ -4514,13 +4528,13 @@ fs_bool fs_path_has_root_path(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 
@@ -4533,13 +4547,13 @@ fs_path fs_path_relative_path(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 
@@ -4554,13 +4568,13 @@ fs_bool fs_path_has_relative_path(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 
@@ -4575,13 +4589,13 @@ fs_path fs_path_parent_path(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 
@@ -4594,13 +4608,13 @@ fs_bool fs_path_has_parent_path(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 
@@ -4613,13 +4627,13 @@ fs_path fs_path_filename(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 
@@ -4634,13 +4648,13 @@ fs_bool fs_path_has_filename(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 
@@ -4655,13 +4669,13 @@ fs_path fs_path_stem(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 
@@ -4676,13 +4690,13 @@ fs_bool fs_path_has_stem(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 
@@ -4697,13 +4711,13 @@ fs_path fs_path_extension(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return NULL;
         }
 
@@ -4718,13 +4732,13 @@ fs_bool fs_path_has_extension(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 
@@ -4739,13 +4753,13 @@ fs_bool fs_path_is_absolute(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return FS_FALSE;
         }
 
@@ -4763,13 +4777,13 @@ fs_path_iter fs_path_begin(fs_cpath p, fs_error_code *ec)
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return (fs_path_iter){0};
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return (fs_path_iter){0};
         }
 
@@ -4898,19 +4912,19 @@ fs_dir_iter fs_directory_iterator_opt(fs_cpath p, fs_directory_options options, 
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return (fs_dir_iter){0};
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return (fs_dir_iter){0};
         }
 
         if (!fs_is_directory(p, ec) || _FS_IS_ERROR_SET(ec)) {
                 if (_FS_IS_ERROR_SET(ec))
-                        _FS_CFS_ERROR(ec, fs_err_not_a_directory);
+                        _FS_CFS_ERROR(ec, fs_cfs_error_not_a_directory);
                 return (fs_dir_iter){0};
         }
 
@@ -4972,19 +4986,19 @@ fs_recursive_dir_iter fs_recursive_directory_iterator_opt(fs_cpath p, fs_directo
 
 #ifndef NDEBUG
         if (!p) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return (fs_recursive_dir_iter){0};
         }
 #endif // !NDEBUG
 
         if (_FS_IS_EMPTY(p)) {
-                _FS_CFS_ERROR(ec, fs_err_invalid_argument);
+                _FS_CFS_ERROR(ec, fs_cfs_error_invalid_argument);
                 return (fs_recursive_dir_iter){0};
         }
 
         if (!fs_is_directory(p, ec) || _FS_IS_ERROR_SET(ec)) {
                 if (_FS_IS_ERROR_SET(ec))
-                        _FS_CFS_ERROR(ec, fs_err_not_a_directory);
+                        _FS_CFS_ERROR(ec, fs_cfs_error_not_a_directory);
                 return (fs_recursive_dir_iter){0};
         }
 

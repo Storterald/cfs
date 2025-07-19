@@ -77,6 +77,7 @@ typedef enum fs_posix_errors {
         fs_posix_error_broken_pipe                       = EPIPE,
         fs_posix_error_filename_too_long                 = ENAMETOOLONG,
         fs_posix_error_function_not_implemented          = ENOSYS,
+        fs_posix_error_directory_not_empty               = ENOTEMPTY,
         fs_posix_error_destination_address_required      = EDESTADDRREQ,
         fs_posix_error_too_many_levels_of_symbolic_links = ELOOP,
         fs_posix_error_disk_quota_exceeded               = EDQUOT,
@@ -187,18 +188,18 @@ typedef enum fs_error_type {
 
 } fs_error_type;
 
-typedef enum fs_err {
-        fs_err_success                   = 0,
-        fs_err_no_such_file_or_directory = ENOENT,
-        fs_err_file_exists               = EEXIST,
-        fs_err_not_a_directory           = ENOTDIR,
-        fs_err_is_a_directory            = EISDIR,
-        fs_err_invalid_argument          = EINVAL,
-        fs_err_name_too_long             = ENAMETOOLONG,
-        fs_err_function_not_supported    = ENOTSUP,
-        fs_err_loop                      = ELOOP
+typedef enum fs_cfs_error {
+        fs_cfs_error_success                   = 0,
+        fs_cfs_error_no_such_file_or_directory = ENOENT,
+        fs_cfs_error_file_exists               = EEXIST,
+        fs_cfs_error_not_a_directory           = ENOTDIR,
+        fs_cfs_error_is_a_directory            = EISDIR,
+        fs_cfs_error_invalid_argument          = EINVAL,
+        fs_cfs_error_name_too_long             = ENAMETOOLONG,
+        fs_cfs_error_function_not_supported    = ENOTSUP,
+        fs_cfs_error_loop                      = ELOOP
 
-} fs_err;
+} fs_cfs_error;
 
 typedef struct fs_space_info {
         uintmax_t capacity;

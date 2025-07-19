@@ -11,7 +11,6 @@
  - [X] Fix mixed styling
  - [X] Add '\\?\' if a path is > MAX_PATH on Windows
  - [X] System error enums (Windows and Posix)
- - [ ] Create fs_remove_all_opt (like copy opt options)
 
 # Version 1.0.0-alpha
 
