@@ -89,46 +89,6 @@ typedef enum fs_posix_errors {
 } fs_posix_errors;
 #endif // !_WIN32
 
-#define FS_DEREF_PATH_ITER(it) ((it).elem)
-#define FS_DEREF_DIR_ITER(it) ((it).elems[(it).pos])
-#define FS_DEREF_RDIR_ITER FS_DEREF_DIR_ITER
-
-#define FOR_EACH_PATH_ITER(__it__)                                      \
-        for (; *FS_DEREF_PATH_ITER(__it__); fs_path_iter_next(&(__it__)))
-
-#define FOR_EACH_ENTRY_IN_DIR(__name__, __it__)                                         \
-        for (fs_cpath __name__ = FS_DEREF_DIR_ITER(__it__); __name__;                   \
-                fs_dir_iter_next(&(__it__)), __name__ = FS_DEREF_DIR_ITER(__it__))
-
-#define FOR_EACH_ENTRY_IN_RDIR FOR_EACH_ENTRY_IN_DIR
-
-#define FS_DESTROY_PATH_ITER(it)        \
-do {                                    \
-        it.pos = NULL;                  \
-        free(it.elem);                  \
-        it.elem = NULL;                 \
-        it.begin = NULL;                \
-} while (FS_FALSE)
-
-#define FS_DESTROY_DIR_ITER(it)                 \
-do {                                            \
-        it.pos   = 0;                           \
-        FOR_EACH_ENTRY_IN_DIR(__path, it)       \
-                free((void *)__path);           \
-        free((void *)it.elems);                 \
-        it.elems = NULL;                        \
-} while (FS_FALSE)
-
-#define FS_DESTROY_RDIR_ITER FS_DESTROY_DIR_ITER
-
-#define FS_RESET_ERROR(pec)                     \
-do {                                            \
-        (pec)->type = fs_error_type_unknown;    \
-        (pec)->code = 0;                        \
-        free((pec)->msg);                       \
-        (pec)->msg = NULL;                      \
-} while (FS_FALSE)
-
 typedef struct fs_file_time_type {
         time_t   seconds;
         uint32_t nanoseconds;
@@ -473,6 +433,38 @@ fs_recursive_dir_iter fs_recursive_directory_iterator_opt(fs_cpath p, fs_directo
 #define fs_recursive_dir_iter_next(__it__) fs_dir_iter_next(__it__)
 
 #define fs_recursive_dir_iter_prev(__it__) fs_dir_iter_prev(__it__)
+
+#define FS_DEREF_PATH_ITER(__it__) ((__it__).elem)
+#define FS_DEREF_DIR_ITER(__it__) ((__it__).elems[(__it__).pos])
+#define FS_DEREF_RDIR_ITER FS_DEREF_DIR_ITER
+
+#define FOR_EACH_PATH_ITER(__it__)                                              \
+        for (; *FS_DEREF_PATH_ITER(__it__); fs_path_iter_next(&(__it__)))
+
+#define FOR_EACH_ENTRY_IN_DIR(__name__, __it__)                                         \
+        for (fs_cpath __name__ = FS_DEREF_DIR_ITER(__it__); __name__;                   \
+                fs_dir_iter_next(&(__it__)), __name__ = FS_DEREF_DIR_ITER(__it__))
+
+#define FOR_EACH_ENTRY_IN_RDIR FOR_EACH_ENTRY_IN_DIR
+
+#define FS_DESTROY_PATH_ITER(it)        \
+do {                                    \
+        (it).pos = NULL;                \
+        free((it).elem);                \
+        (it).elem = NULL;               \
+        (it).begin = NULL;              \
+} while (FS_FALSE)
+
+#define FS_DESTROY_DIR_ITER(it)                 \
+do {                                            \
+        (it).pos = 0;                           \
+        FOR_EACH_ENTRY_IN_DIR(__path, it)       \
+                free((void *)__path);           \
+        free((void *)(it).elems);               \
+        (it).elems = NULL;                      \
+} while (FS_FALSE)
+
+#define FS_DESTROY_RDIR_ITER FS_DESTROY_DIR_ITER
 
 //          fs_iters --------
 

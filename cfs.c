@@ -231,8 +231,8 @@ typedef struct stat _fs_stat;
 #pragma region macros
 #define _FS_CLEAR_ERROR_CODE(ec)                \
 do {                                            \
-        ec = ec ? ec : &_fs_internal_error;     \
-        *ec = (fs_error_code){0};               \
+        ec = (ec) ? (ec) : &_fs_internal_error; \
+        *(ec) = (fs_error_code){0};             \
 } while (FS_FALSE)
 
 #define _FS_CFS_ERROR(ec, e)                            \
@@ -481,163 +481,151 @@ char *_fs_error_string(fs_error_type type, uint32_t e)
         case fs_error_type_cfs:
                 switch((fs_err)e) {
                 case fs_err_success:
-                        return _FS_SDUP("cfs error: success");
+                        return "cfs error: success";
                 case fs_err_no_such_file_or_directory:
-                        return _FS_SDUP("cfs error: no such file or directory");
+                        return "cfs error: no such file or directory";
                 case fs_err_file_exists:
-                        return _FS_SDUP("cfs error: file already exists");
+                        return "cfs error: file already exists";
                 case fs_err_not_a_directory:
-                        return _FS_SDUP("cfs error: iter is not a directory");
+                        return "cfs error: iter is not a directory";
                 case fs_err_is_a_directory:
-                        return _FS_SDUP("cfs error: item is a directory");
+                        return "cfs error: item is a directory";
                 case fs_err_invalid_argument:
-                        return _FS_SDUP("cfs error: invalid argument");
+                        return "cfs error: invalid argument";
                 case fs_err_name_too_long:
-                        return _FS_SDUP("cfs error: name too long");
+                        return "cfs error: name too long";
                 case fs_err_function_not_supported:
-                        return _FS_SDUP("cfs error: function not supported");
+                        return "cfs error: function not supported";
                 case fs_err_loop:
-                        return _FS_SDUP("cfs error: symlink loop");
+                        return "cfs error: symlink loop";
                 }
                 break;
         case fs_error_type_system:
 #ifdef _WIN32
                 switch ((fs_win_errors)e) {
                 case fs_win_error_success:
-                        return _FS_SDUP("cfs windows error: success");
+                        return "cfs windows error: success";
                 case fs_win_error_invalid_function:
-                        return _FS_SDUP("cfs windows error: invalid function");
+                        return "cfs windows error: invalid function";
                 case fs_win_error_file_not_found:
-                        return _FS_SDUP("cfs windows error: file not found");
+                        return "cfs windows error: file not found";
                 case fs_win_error_path_not_found:
-                        return _FS_SDUP("cfs windows error: path not found");
+                        return "cfs windows error: path not found";
                 case fs_win_error_access_denied:
-                        return _FS_SDUP("cfs windows error: access denied");
+                        return "cfs windows error: access denied";
                 case fs_win_error_not_enough_memory:
-                        return _FS_SDUP("cfs windows error: not enough memory");
+                        return "cfs windows error: not enough memory";
                 case fs_win_error_no_more_files:
-                        return _FS_SDUP("cfs windows error: no more files");
+                        return "cfs windows error: no more files";
                 case fs_win_error_sharing_violation:
-                        return _FS_SDUP("cfs windows error: sharing violation");
+                        return "cfs windows error: sharing violation";
                 case fs_win_error_not_supported:
-                        return _FS_SDUP("cfs windows error: not supported");
+                        return "cfs windows error: not supported";
                 case fs_win_error_bad_netpath:
-                        return _FS_SDUP("cfs windows error: bad netpath");
+                        return "cfs windows error: bad netpath";
                 case fs_win_error_netname_deleted:
-                        return _FS_SDUP("cfs windows error: netname deleted");
+                        return "cfs windows error: netname deleted";
                 case fs_win_error_file_exists:
-                        return _FS_SDUP("cfs windows error: file exists");
+                        return "cfs windows error: file exists";
                 case fs_win_error_invalid_parameter:
-                        return _FS_SDUP("cfs windows error: invalid parameter");
+                        return "cfs windows error: invalid parameter";
                 case fs_win_error_insufficient_buffer:
-                        return _FS_SDUP("cfs windows error: insufficient buffer");
+                        return "cfs windows error: insufficient buffer";
                 case fs_win_error_invalid_name:
-                        return _FS_SDUP("cfs windows error: invalid name");
+                        return "cfs windows error: invalid name";
                 case fs_win_error_directory_not_empty:
-                        return _FS_SDUP("cfs windows error: directory not empty");
+                        return "cfs windows error: directory not empty";
                 case fs_win_error_already_exists:
-                        return _FS_SDUP("cfs windows error: already exists");
+                        return "cfs windows error: already exists";
                 case fs_win_error_filename_exceeds_range:
-                        return _FS_SDUP("cfs windows error: filename exceeds range");
+                        return "cfs windows error: filename exceeds range";
                 case fs_win_error_directory_name_is_invalid:
-                        return _FS_SDUP("cfs windows error: invalid directory name");
+                        return "cfs windows error: invalid directory name";
                 case fs_win_error_privilege_not_held:
-                        return _FS_SDUP("cfs windows error: not enough permissions");
+                        return "cfs windows error: not enough permissions";
                 case fs_win_error_reparse_tag_invalid:
-                        return _FS_SDUP("cfs windows error: invalid reparse tag");
+                        return "cfs windows error: invalid reparse tag";
                 default:
-                        return _FS_SDUP("cfs windows error: unknown error");
+                        return "cfs windows error: unknown error";
                 }
 #else // _WIN32
                 switch ((fs_posix_errors)e) {
                 case fs_posix_error_success:
-                        return _FS_SDUP("cfs posix error: success");
+                        return "cfs posix error: success";
                 case fs_posix_error_operation_not_permitted:
-                        return _FS_SDUP("cfs posix error: operation not permitted");
+                        return "cfs posix error: operation not permitted";
                 case fs_posix_error_no_such_file_or_directory:
-                        return _FS_SDUP("cfs posix error: no such file or "
-                                        "directory");
+                        return "cfs posix error: no such file or directory";
                 case fs_posix_error_interrupted_function_call:
-                        return _FS_SDUP("cfs posix error: interrupted function "
-                                        "call");
+                        return "cfs posix error: interrupted function call";
                 case fs_posix_error_input_output_error:
-                        return _FS_SDUP("cfs posix error: input/output error");
+                        return "cfs posix error: input/output error";
                 case fs_posix_error_no_such_device_or_address:
-                        return _FS_SDUP("cfs posix error: no such device or "
-                                        "address");
+                        return "cfs posix error: no such device or address";
                 case fs_posix_error_bad_file_descriptor:
-                        return _FS_SDUP("cfs posix error: bad file descriptor");
+                        return "cfs posix error: bad file descriptor";
                 case fs_posix_error_resource_temporarily_unavailable:
-                        return _FS_SDUP("cfs posix error: resource temporarily "
-                                        "unavailable");
+                        return "cfs posix error: resource temporarily unavailable";
                 case fs_posix_error_cannot_allocate_memory:
-                        return _FS_SDUP("cfs posix error: cannot allocate memory");
+                        return "cfs posix error: cannot allocate memory";
                 case fs_posix_error_permission_denied:
-                        return _FS_SDUP("cfs posix error: permission denied");
+                        return "cfs posix error: permission denied";
                 case fs_posix_error_bad_address:
-                        return _FS_SDUP("cfs posix error: bad address");
+                        return "cfs posix error: bad address";
                 case fs_posix_error_device_or_resource_busy:
-                        return _FS_SDUP("cfs posix error: device or resource "
-                                        "busy");
+                        return "cfs posix error: device or resource busy";
                 case fs_posix_error_file_exists:
-                        return _FS_SDUP("cfs posix error: file exists");
+                        return "cfs posix error: file exists";
                 case fs_posix_error_invalid_cross_device_link:
-                        return _FS_SDUP("cfs posix error: invalid cross device "
-                                        "link");
+                        return "cfs posix error: invalid cross device link";
                 case fs_posix_error_no_such_device:
-                        return _FS_SDUP("cfs posix error: no such device");
+                        return "cfs posix error: no such device";
                 case fs_posix_error_not_a_directory:
-                        return _FS_SDUP("cfs posix error: not a directory");
+                        return "cfs posix error: not a directory";
                 case fs_posix_error_is_a_directory:
-                        return _FS_SDUP("cfs posix error: item is a directory");
+                        return "cfs posix error: item is a directory";
                 case fs_posix_error_invalid_argument:
-                        return _FS_SDUP("cfs posix error: invalid argument");
+                        return "cfs posix error: invalid argument";
                 case fs_posix_error_too_many_files_open_in_system:
-                        return _FS_SDUP("cfs posix error: too many files open in "
-                                        "system");
+                        return "cfs posix error: too many files open in system";
                 case fs_posix_error_too_many_open_files:
-                        return _FS_SDUP("cfs posix error: too many open files");
+                        return "cfs posix error: too many open files";
                 case fs_posix_error_file_too_large:
-                        return _FS_SDUP("cfs posix error: file too large");
+                        return "cfs posix error: file too large";
                 case fs_posix_error_no_space_left_on_disk:
-                        return _FS_SDUP("cfs posix error: no space left on disk");
+                        return "cfs posix error: no space left on disk";
                 case fs_posix_error_read_only_filesystem:
-                        return _FS_SDUP("cfs posix error: read only filesystem");
+                        return "cfs posix error: read only filesystem";
                 case fs_posix_error_too_many_links:
-                        return _FS_SDUP("cfs posix error: too many links");
+                        return "cfs posix error: too many links";
                 case fs_posix_error_broken_pipe:
-                        return _FS_SDUP("cfs posix error: broken pipe");
+                        return "cfs posix error: broken pipe";
                 case fs_posix_error_filename_too_long:
-                        return _FS_SDUP("cfs posix error: filename too long");
+                        return "cfs posix error: filename too long";
                 case fs_posix_error_function_not_implemented:
-                        return _FS_SDUP("cfs posix error: function not implemented");
+                        return "cfs posix error: function not implemented";
                 case fs_posix_error_destination_address_required:
-                        return _FS_SDUP("cfs posix error: destination address "
-                                        "required");
+                        return "cfs posix error: destination address required";
                 case fs_posix_error_too_many_levels_of_symbolic_links:
-                        return _FS_SDUP("cfs posix error: too many levels of "
-                                        "symbolic links");
+                        return "cfs posix error: too many levels of symbolic links";
                 case fs_posix_error_operation_not_supported:
-                        return _FS_SDUP("cfs posix error: operation not supported");
+                        return "cfs posix error: operation not supported";
                 case fs_posix_error_operation_not_supported_on_socket:
-                        return _FS_SDUP("cfs posix error: operation not supported "
-                                        "on socket");
+                        return "cfs posix error: operation not supported on socket";
                 case fs_posix_error_value_too_large:
-                        return _FS_SDUP("cfs posix error: value too large");
+                        return "cfs posix error: value too large";
                 case fs_posix_error_text_file_busy:
-                        return _FS_SDUP("cfs posix error: text file busy");
+                        return "cfs posix error: text file busy";
                 case fs_posix_error_operation_would_block:
-                        return _FS_SDUP("cfs posix error: operation would block");
+                        return "cfs posix error: operation would block";
                 default:
-                        return _FS_SDUP("cfs posix error: unknown error");
+                        return "cfs posix error: unknown error";
                 }
 #endif // !_WIN32
                 break;
         }
 
-        char *const buf = malloc(64);
-        sprintf(buf, "Unknown error: %u", e);
-        return buf;
+        return "invalid error type";
 }
 
 fs_path _dupe_string(fs_cpath first, fs_cpath last)
