@@ -2208,6 +2208,18 @@ fs_bool _linux_sendfile(int in, int out, size_t len, fs_error_code *ec) {
 
 #pragma region fs
 
+fs_path fs_make_path(const char *path)
+{
+#ifdef _WIN32
+        const size_t len = strlen(path);
+        wchar_t *buf     = calloc(1, (len + 1) * sizeof(wchar_t));
+        mbstowcs(buf, path, len);
+        return buf;
+#else // _WIN32
+        return strdup(path);
+#endif // !_WIN32
+}
+
 fs_path fs_absolute(fs_cpath p, fs_error_code *ec)
 {
         _FS_CLEAR_ERROR_CODE(ec);
