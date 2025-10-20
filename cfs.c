@@ -2220,7 +2220,7 @@ fs_path fs_make_path(const char *path)
 #endif // !_WIN32
 }
 
-const char *fs_path_get(fs_path path)
+char *fs_path_get(fs_path path)
 {
 #ifdef _WIN32
         const size_t len = wcslen(path);
