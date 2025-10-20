@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 project(cfs LANGUAGES C)
 
-cmake_policy(SET CMP0079 NEW)
+option(BUILD_TESTS "Build tests target" ON)
 
 add_library(cfs STATIC "cfs.c")
 
@@ -24,6 +24,8 @@ else ()
 endif ()
 
 if (BUILD_TESTS)
+        cmake_policy(SET CMP0079 NEW)
+
         add_subdirectory("tests")
         target_link_libraries(cfs_test PRIVATE cfs)
 endif ()
