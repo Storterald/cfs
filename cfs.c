@@ -1,4 +1,4 @@
-#include "cfs.h"
+#include <cfs/cfs.h>
 
 static fs_error_code _fs_internal_error = {0};
 
@@ -934,8 +934,8 @@ int _get_recursive_entries(fs_cpath p, fs_cpath **buf, int *alloc, fs_bool follo
         if (!fe)
                 fe = &forceexit;
 
-        _fs_dir_entry entry;
-        const _fs_dir dir = _find_first(p, &entry, skipdenied, FS_TRUE, ec);
+        _fs_dir_entry entry = {0};
+        const _fs_dir dir   = _find_first(p, &entry, skipdenied, FS_TRUE, ec);
 
         if (_FS_IS_ERROR_SET(ec)) {
                 *fe = FS_TRUE;
@@ -4098,6 +4098,9 @@ void fs_path_make_preferred(fs_path *pp, fs_error_code *ec)
         }
 #else // !NDEBUG
         (void)ec;
+#ifndef _WIN32
+        (void)pp;
+#endif // _WIN32
 #endif // NDEBUG
 
 #ifdef _WIN32
@@ -4953,8 +4956,8 @@ fs_dir_iter fs_directory_iterator_opt(fs_cpath p, fs_directory_options options, 
 
         const fs_bool skipdenied = _FS_ANY_FLAG_SET(options, fs_directory_options_skip_permission_denied);
 
-        _fs_dir_entry entry;
-        const _fs_dir dir = _find_first(p, &entry, skipdenied, FS_TRUE, ec);
+        _fs_dir_entry entry = {0};
+        const _fs_dir dir   = _find_first(p, &entry, skipdenied, FS_TRUE, ec);
         if (_FS_IS_ERROR_SET(ec))
                 return (fs_dir_iter){0};
 
