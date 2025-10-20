@@ -25,3 +25,5 @@ or a **custom** one.
    `Release` mode.
  - `fs_file_time_type` is based on the **UNIX** epoch on **all** OSs.
  - `fs_relative` and `fs_proximate` **do** follow symlinks.
+ - `fs_hard_link_count` always does **not** include the file itself as a link for
+   consistency across operating systems.

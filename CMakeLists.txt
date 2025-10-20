@@ -11,9 +11,8 @@ if (MSVC)
                 PRIVATE "/WX"
                 PRIVATE "/wd4820"  # Silence implicit padding
                 PRIVATE "/wd5045"  # Silence spectre mitigation
-
-                # Silenced due to WinAPI:
-                PRIVATE "/wd4668")
+                PRIVATE "/wd4668"  # Silenced due to WinAPI
+                )
         target_compile_definitions(cfs
                 PRIVATE _CRT_SECURE_NO_WARNINGS)
 else ()

@@ -6,7 +6,9 @@ extern "C" {
 #endif
 
 #include <stdint.h>
+#include <stddef.h>
 #include <errno.h>
+#include <time.h>
 
 typedef uint8_t fs_bool;
 #define FS_TRUE 1U
@@ -145,10 +147,10 @@ typedef enum fs_perms {
 } fs_perms;
 
 typedef enum fs_perm_options {
-        fs_perm_options_replace  = 0x0,
-        fs_perm_options_add      = 0x1,
-        fs_perm_options_remove   = 0x2,
-        fs_perm_options_nofollow = 0x4,
+        fs_perm_options_replace  = 0x1,
+        fs_perm_options_add      = 0x2,
+        fs_perm_options_remove   = 0x4,
+        fs_perm_options_nofollow = 0x8,
 
 } fs_perm_options;
 
