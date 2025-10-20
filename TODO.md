@@ -1,4 +1,4 @@
-# Version 1.1.0-alpha
+# Version 1.0.0-beta
 
  - [ ] Optimize functions avoiding multiple equal parsing calls
  - [ ] Tests with GoogleTest

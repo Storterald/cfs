@@ -3887,7 +3887,7 @@ fs_bool fs_is_empty(fs_cpath p, fs_error_code *ec)
                 empty          = !FS_DEREF_DIR_ITER(it);
                 FS_DESTROY_DIR_ITER(it);
         } else {
-                empty = fs_file_size(p, ec) != 0;
+                empty = fs_file_size(p, ec) == 0;
         }
 
         return !_FS_IS_ERROR_SET(ec) && empty;
@@ -4794,6 +4794,10 @@ fs_bool fs_path_is_relative(fs_cpath p, fs_error_code *ec)
         return !fs_path_is_absolute(p, ec);
 }
 
+#pragma endregion fs_path
+
+#pragma region fs_iters
+
 fs_path_iter fs_path_begin(fs_cpath p, fs_error_code *ec)
 {
         _FS_CLEAR_ERROR_CODE(ec);
@@ -4844,10 +4848,6 @@ fs_path_iter fs_path_end(fs_cpath p)
                 .begin = p
         };
 }
-
-#pragma endregion fs_path
-
-#pragma region fs_iters
 
 void fs_path_iter_next(fs_path_iter *it)
 {

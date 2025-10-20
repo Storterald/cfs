@@ -409,13 +409,13 @@ fs_bool fs_path_is_absolute(fs_cpath p, fs_error_code *ec);
 
 fs_bool fs_path_is_relative(fs_cpath p, fs_error_code *ec);
 
-fs_path_iter fs_path_begin(fs_cpath p, fs_error_code *ec);
-
-fs_path_iter fs_path_end(fs_cpath p);
-
 //          fs_path --------
 
 // -------- fs_iters
+
+fs_path_iter fs_path_begin(fs_cpath p, fs_error_code *ec);
+
+fs_path_iter fs_path_end(fs_cpath p);
 
 void fs_path_iter_next(fs_path_iter *it);
 
