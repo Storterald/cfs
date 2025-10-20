@@ -27,6 +27,6 @@ endif ()
 if (BUILD_TESTS)
         cmake_policy(SET CMP0079 NEW)
 
-        add_subdirectory("tests")
+        add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/tests")
         target_link_libraries(cfs_test PRIVATE cfs)
 endif ()
