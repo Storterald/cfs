@@ -2212,8 +2212,20 @@ fs_path fs_make_path(const char *path)
 {
 #ifdef _WIN32
         const size_t len = strlen(path);
-        wchar_t *buf     = calloc(1, (len + 1) * sizeof(wchar_t));
+        wchar_t *buf     = calloc(sizeof(wchar_t), len + 1);
         mbstowcs(buf, path, len);
+        return buf;
+#else // _WIN32
+        return strdup(path);
+#endif // !_WIN32
+}
+
+const char *fs_path_get(fs_path path)
+{
+#ifdef _WIN32
+        const size_t len = wcslen(path);
+        char *buf     = calloc(sizeof(char), len + 1);
+        wcstombs(buf, path, len);
         return buf;
 #else // _WIN32
         return strdup(path);

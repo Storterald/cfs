@@ -239,6 +239,8 @@ typedef fs_dir_iter fs_recursive_dir_iter;
 
 fs_path fs_make_path(const char *path);
 
+const char *fs_path_get(fs_path path);
+
 fs_path fs_absolute(fs_cpath p, fs_error_code *ec);
 
 fs_path fs_canonical(fs_cpath p, fs_error_code *ec);
