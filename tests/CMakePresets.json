@@ -30,7 +30,7 @@
       "cacheVariables": {
         "CMAKE_C_COMPILER": "gcc",
         "CMAKE_CXX_COMPILER": "g++",
-        "CMAKE_C_FLAGS": "-m64",
+        "CMAKE_C_FLAGS": "-m64 -Wall -Wextra -Wpedantic -Werror",
         "CMAKE_CXX_FLAGS": "-m64"
       },
       "vendor": {
@@ -73,13 +73,9 @@
       "cacheVariables": {
         "CMAKE_C_COMPILER": "clang",
         "CMAKE_CXX_COMPILER": "clang++",
-        "CMAKE_C_FLAGS": "-m64 $env{DEBUG_FLAGS} $env{SANITIZE_FLAGS}",
-        "CMAKE_CXX_FLAGS": "-m64 $env{DEBUG_FLAGS} $env{SANITIZE_FLAGS}",
-        "CMAKE_EXE_LINKER_FLAGS": "$env{SANITIZE_FLAGS}"
-      },
-      "environment": {
-        "SANITIZE_FLAGS": "-fno-omit-frame-pointer -fsanitize=address",
-        "DEBUG_FLAGS": "-gdwarf-4"
+        "CMAKE_C_FLAGS": "-m64 -Wall -Wextra -Wpedantic -Werror -gdwarf-4 -fno-omit-frame-pointer -fsanitize=address",
+        "CMAKE_CXX_FLAGS": "-m64 -gdwarf-4 -fno-omit-frame-pointer -fsanitize=address",
+        "CMAKE_EXE_LINKER_FLAGS": "-fno-omit-frame-pointer -fsanitize=address"
       },
       "vendor": {
         "jetbrains.com/clion": {
