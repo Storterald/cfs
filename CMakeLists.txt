@@ -4,7 +4,7 @@ project(cfs LANGUAGES C)
 option(BUILD_TESTS "Build tests target" ON)
 
 add_library(cfs STATIC "cfs.c")
-target_include_directories(cfs PUBLIC "${CMAKE_CURRENT_LIST_DIR}/include")
+target_include_directories(cfs PRIVATE "${CMAKE_CURRENT_LIST_DIR}/include")
 
 if (MSVC)
         target_compile_options(cfs
@@ -29,4 +29,5 @@ if (BUILD_TESTS)
 
         add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/tests")
         target_link_libraries(cfs_test PRIVATE cfs)
+        target_include_directories(cfs_test PRIVATE "${CMAKE_CURRENT_LIST_DIR}/include")
 endif ()
