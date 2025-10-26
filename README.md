@@ -1,3 +1,6 @@
+> ⚠️ Warning<br>
+> The library is currently being tested.
+
 # CFS: cross-platform filesystem API in C99
 
 A single header implementation of `std::filesystem`/`Boost.Filesystem` in `C99`.
@@ -9,16 +12,18 @@ A single header implementation of `std::filesystem`/`Boost.Filesystem` in `C99`.
 ### Usage:
 
 ```c++
+// #define _GNU_SOURCE (recommended, not required in C++). This
+//  should be ideally defined as a compiler definition, not using a #define. 
+
 #define CFS_IMPLEMENTATION
-// #define _GNU_SOURCE (optional, not required in C++) 
 #include <cfs/cfs.h>
 ```
 
 ### OS support
 
-| Windows          | Linux           | BSD      | macOS X (Darwin) |
-|:-----------------|:----------------|:---------|:-----------------|
-| Windows **XP***+ | Kernel **2.0**+ | **4.2**+ | Darwin **1.0**+  |
+| Windows          | Linux              | BSD      | macOS X (Darwin) |
+|:-----------------|:-------------------|:---------|:-----------------|
+| Windows **XP***+ | Kernel **2.6.32**+ | **4.2**+ | Darwin **1.0**+  |
 
 \* Symlinks are only supported on Windows **Vista** and above.
 
