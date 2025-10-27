@@ -1,16 +1,17 @@
 # Version 1.0.0-beta
 
  - [ ] Optimize functions avoiding multiple equal parsing calls
- - [ ] Tests with GoogleTest
- - [ ] GitHub actions for Windows, Linux and macOS
+ - [X] Tests
+ - [X] Rewrite in **C90** / **ANSI C**
+ - [ ] GitHub actions for *Windows*, *Linux* and *macOS*
  - [ ] Verify allocations
  - [X] Check parameters
- - [X] Verify minimum OS version off all API calls used (Windows, Linux, macOS, BSD)
+ - [X] Verify minimum OS version off all API calls used (*Windows*, *Linux*, *macOS*, *BSD*)
  - [X] Make sure every call that returns path handles resizes (with for (;;) or similar)
  - [ ] Don't precompute all directory iterators members
  - [X] Fix mixed styling
- - [X] Add '\\?\' if a path is > MAX_PATH on Windows
- - [X] System error enums (Windows and Posix)
+ - [X] Add '\\?\' if a path is > **MAX_PATH** on *Windows*
+ - [X] System error enums (*Windows* and *Posix*)
 
 # Version 1.0.0-alpha
 

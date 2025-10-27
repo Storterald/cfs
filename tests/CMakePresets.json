@@ -2,7 +2,7 @@
   "version": 3,
   "cmakeMinimumRequired": {
     "major": 3,
-    "minor": 5,
+    "minor": 10,
     "patch": 0
   },
   "configurePresets": [
@@ -12,11 +12,8 @@
       "binaryDir": "${sourceDir}/build/${presetName}",
       "installDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
-        "PRESETS_PROFILE": "ON",
-        "CMAKE_C_STANDARD": "99",
-        "CMAKE_C_STANDARD_REQUIRED": "ON",
-        "CMAKE_CXX_STANDARD": "23",
-        "CMAKE_CXX_STANDARD_REQUIRED": "ON"
+        "CMAKE_C_STANDARD": "90",
+        "CMAKE_C_STANDARD_REQUIRED": "ON"
       },
       "warnings": {
         "unusedCli": false
@@ -29,9 +26,7 @@
       "generator": "Ninja",
       "cacheVariables": {
         "CMAKE_C_COMPILER": "gcc",
-        "CMAKE_CXX_COMPILER": "g++",
-        "CMAKE_C_FLAGS": "-m64 -Wall -Wextra -Wpedantic -Werror",
-        "CMAKE_CXX_FLAGS": "-m64"
+        "CMAKE_C_FLAGS": "-Wall -Wextra -Wpedantic -Werror"
       },
       "vendor": {
         "jetbrains.com/clion": {
@@ -72,17 +67,15 @@
       "generator": "Ninja",
       "cacheVariables": {
         "CMAKE_C_COMPILER": "clang",
-        "CMAKE_CXX_COMPILER": "clang++",
-        "CMAKE_C_FLAGS": "-m64 -Wall -Wextra -Wpedantic -Werror -gdwarf-4 -fno-omit-frame-pointer -fsanitize=address",
-        "CMAKE_CXX_FLAGS": "-m64 -gdwarf-4 -fno-omit-frame-pointer -fsanitize=address",
-        "CMAKE_EXE_LINKER_FLAGS": "-fno-omit-frame-pointer -fsanitize=address"
+        "CMAKE_C_FLAGS": "-Wall -Wextra -Wpedantic -Werror -gdwarf-4 -fno-omit-frame-pointer -fsanitize=address -fsanitize=undefined",
+        "CMAKE_EXE_LINKER_FLAGS": "-fno-omit-frame-pointer -fsanitize=address -fsanitize=undefined"
       },
       "vendor": {
         "jetbrains.com/clion": {
           "toolchain": "MinGW Clang"
         },
         "microsoft.com/VisualStudioSettings/CMake/1.0": {
-          "intelliSenseMode": "linux-gcc-x64"
+          "intelliSenseMode": "linux-clang-x64"
         }
       }
     },
