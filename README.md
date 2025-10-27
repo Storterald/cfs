@@ -21,9 +21,9 @@ A single header implementation of `std::filesystem`/`Boost.Filesystem` in `C99`.
 
 ### OS support
 
-| Windows          | Linux              | BSD      | macOS X (Darwin) |
-|:-----------------|:-------------------|:---------|:-----------------|
-| Windows **XP***+ | Kernel **2.6.32**+ | **4.2**+ | Darwin **1.0**+  |
+| Windows          | Linux                                   | BSD      | macOS X (Darwin) |
+|:-----------------|:----------------------------------------|:---------|:-----------------|
+| Windows **XP***+ | Kernel **2.0.38**+<br/>Glibc **2.1.3**+ | **4.2**+ | Darwin **1.0**+  |
 
 \* Symlinks are only supported on Windows **Vista** and above.
 

@@ -20,6 +20,8 @@ do {                                                                            
 #ifdef _WIN32
 #define WIN_ONLY(x) x
 #else
+#include <gnu/libc-version.h>
+#include <sys/utsname.h>
 #define WIN_ONLY(x)
 #endif
 
@@ -2248,6 +2250,28 @@ TEST(fs_recursive_directory_iterator, contains_all_entries_recursively_in_direct
 TODO test opts for fs_recursive_directory_iterator
 */
 
+#ifdef CFS_TEST_PRINT_ENV
+static void _print_test_env(void)
+{
+#ifndef _WIN32
+        struct utsname name = {0};
+#endif
+
+        printf("Running main() from %s\n", __FILE__);
+
+#ifndef _WIN32
+        if (uname(&name))
+                return;
+
+        printf("System info:\n"
+               "  linux kernel:  %s\n"
+               "  glibc version: %s\n\n",
+                name.release,
+                gnu_get_libc_version());
+#endif /* !_WIN32 */
+}
+#endif /* CFS_TEST_PRINT_ENV */
+
 static void _create_file(const char *path)
 {
         FILE *f = fopen(path, "w");
@@ -2290,6 +2314,9 @@ static void _prepare_env(void)
 
 int main(void)
 {
+#ifdef CFS_TEST_PRINT_ENV
+        _print_test_env();
+#endif
         _prepare_env();
 
         REGISTER_TEST(fs_absolute, existent_path);
