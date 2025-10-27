@@ -656,7 +656,7 @@ typedef struct _fs_generic_reparse_buffer       _fs_generic_reparse_buffer;
 #endif /* _FS_SYMLINKS_SUPPORTED */
 #else /* !_WIN32 */
 #ifdef __GLIBC__
-#define _FS_GLIBC(__major__, __minor__) (__major__ > __GLIBC__ || (__major__ == __GLIBC__ && __GLIBC_MINOR__ >= __minor__))
+#define _FS_GLIBC(__major__, __minor__) ((__major__) > __GLIBC__ || ((__major__) == __GLIBC__ && __GLIBC_MINOR__ >= (__minor__)))
 #else
 #define _FS_GLIBC(__major__, __minor__) 0
 #endif

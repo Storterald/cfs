@@ -8,6 +8,19 @@
 
 #include "cfs/cfs.h"
 
+#ifdef CFS_TESTS_USE_COLORS
+#define CFS_TESTS_RED   "\x1b[31m"
+#define CFS_TESTS_GREEN "\x1b[32m"
+#define CFS_TESTS_RESET "\x1b[0m"
+#else
+#define CFS_TESTS_RED
+#define CFS_TESTS_GREEN
+#define CFS_TESTS_RESET
+#endif
+
+#define _CFS_TESTS_RED(__text__)   CFS_TESTS_RED __text__ CFS_TESTS_RESET
+#define _CFS_TESTS_GREEN(__text__) CFS_TESTS_GREEN __text__ CFS_TESTS_RESET
+
 #define __TO_STRING(x) #x
 #define STRINGIFY(x)   __TO_STRING(x)
 
@@ -34,7 +47,7 @@ static int _##__function_name__##_##__use__##_test(void) {                      
         int     elapsed;                                                        \
         int     ret;                                                            \
                                                                                 \
-        printf("[ RUN      ] %s\n", __test_id);                                 \
+        printf(_CFS_TESTS_GREEN("[ RUN      ]") " %s\n", __test_id);            \
                                                                                 \
         start = clock();                                                        \
                                                                                 \
@@ -46,13 +59,16 @@ static int _##__function_name__##_##__use__##_test(void) {                      
                                                                                 \
         switch (ret) {                                                          \
         case 0:                                                                 \
-                printf("[       OK ] %s (%d ms)\n", __test_id, elapsed);        \
+                printf(_CFS_TESTS_GREEN("[       OK ]") " %s (%d ms)\n",        \
+                        __test_id, elapsed);                                    \
                 return 1;                                                       \
         case 1:                                                                 \
-                printf("[  SKIPPED ] %s (%d ms)\n", __test_id, elapsed);        \
+                printf(_CFS_TESTS_GREEN("[  SKIPPED ]") " %s (%d ms)\n",        \
+                        __test_id, elapsed);                                    \
                 return 1;                                                       \
         default:                                                                \
-                printf("[  FAILED  ] %s (%d ms)\n", __test_id, elapsed);        \
+                printf(_CFS_TESTS_RED("[  FAILED  ]") " %s (%d ms)\n",          \
+                        __test_id, elapsed);                                    \
                 return 0;                                                       \
         }                                                                       \
 }                                                                               \
@@ -107,8 +123,8 @@ extern int RUN_ALL_TESTS(void)
         for (i = 0; i < __tests_count; ++i)
                 tot += __tests[i].count;
 
-        printf("[==========] Running %d tests from %d test suites.\n", tot, __tests_count);
-        printf("[----------] Global test environment set-up.\n");
+        printf(_CFS_TESTS_GREEN("[==========]") " Running %d tests from %d test suites.\n", tot, __tests_count);
+        printf(_CFS_TESTS_GREEN("[----------]") " Global test environment set-up.\n");
 
         succ  = 0;
         start = clock();
@@ -120,7 +136,7 @@ extern int RUN_ALL_TESTS(void)
                 clock_t tstart;
                 clock_t tend;
 
-                printf("[----------] %d tests from %s\n", t->count, t->name);
+                printf(_CFS_TESTS_GREEN("[----------]") " %d tests from %s\n", t->count, t->name);
 
                 tstart = clock();
                 for (j = 0; j < t->count; ++j)
@@ -129,20 +145,20 @@ extern int RUN_ALL_TESTS(void)
                 tend    = clock();
                 elapsed = (tend - tstart) * 1000.0 / CLOCKS_PER_SEC;
 
-                printf("[----------] %d tests from %s (%d ms total)\n\n", t->count, t->name, elapsed);
+                printf(_CFS_TESTS_GREEN("[----------]") " %d tests from %s (%d ms total)\n\n", t->count, t->name, elapsed);
         }
         end     = clock();
         elapsed = (end - start) * 1000.0 / CLOCKS_PER_SEC;
         failed  = tot - succ;
 
-        printf("[----------] Global test environment tear-down\n");
-        printf("[==========] %d test%s from %d test case%s ran. (%d ms total)\n",
+        printf(_CFS_TESTS_GREEN("[----------]") " Global test environment tear-down\n");
+        printf(_CFS_TESTS_GREEN("[==========]") " %d test%s from %d test case%s ran. (%d ms total)\n",
                 tot, tot != 1 ? "s" : "", __tests_count,
                 __tests_count != 1 ? "s" : "", elapsed);
-        printf("[  PASSED  ] %d test%s.\n", succ, succ != 1 ? "s" : "");
+        printf(_CFS_TESTS_GREEN("[  PASSED  ]") " %d test%s.\n", succ, succ != 1 ? "s" : "");
 
         if (failed)
-                printf("[  FAILED  ] %d test%s.\n", failed, failed != 1 ? "s" : "");
+                printf(_CFS_TESTS_RED("[  FAILED  ]") " %d test%s.\n", failed, failed != 1 ? "s" : "");
 
         return succ == tot ? EXIT_SUCCESS : EXIT_FAILURE;
 }
