@@ -20,7 +20,7 @@ function run_test {
   result=$?
   echo ""
 
-  if [ $result -eq 0 ]; then
+  if test $result -eq 0; then
     echo "Successfully run tests from: $1."
     ((++passed))
   else
@@ -46,7 +46,7 @@ function end_tests {
   printf "\x1b[32m[==========]\x1b[0m %s test environments ran. (%s ms total)\n" "$total" "$((end - start))"
   printf "\x1b[32m[  PASSED  ]\x1b[0m %s test environments\n" "$passed"
 
-  if [ ${#failed[@]} ]; then
+  if test ${#failed[@]} -ne 0; then
     printf "\x1b[31m[  FAILED  ]\x1b[0m %s test environments, listed below:\n" "${#failed[@]}"
     printf "\x1b[31m[  FAILED  ]\x1b[0m %s\n" "${failed[@]}"
     exit 1
@@ -57,6 +57,7 @@ function end_tests {
 
 begin_tests
 
+run_test debian_potato/i386   linux debian/eol:potato  linux/i386
 run_test debian_woody/i386    linux debian/eol:woody   linux/i386
 run_test debian_etch/i386     linux debian/eol:etch    linux/i386
 run_test debian_etch/amd64    linux debian/eol:etch    linux/amd64

@@ -655,6 +655,18 @@ typedef struct _fs_mount_point_reparse_buffer   _fs_mount_point_reparse_buffer;
 typedef struct _fs_generic_reparse_buffer       _fs_generic_reparse_buffer;
 #endif /* _FS_SYMLINKS_SUPPORTED */
 #else /* !_WIN32 */
+#ifdef _FS_64BIT
+#define _FILE_OFFSET_BITS 64
+#endif
+
+#include <sys/statvfs.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <unistd.h>
+#include <limits.h>
+#include <dirent.h>
+#include <fcntl.h>
 #ifdef __GLIBC__
 #define _FS_GLIBC(__major__, __minor__) ((__major__) > __GLIBC__ || ((__major__) == __GLIBC__ && __GLIBC_MINOR__ >= (__minor__)))
 #else
@@ -766,7 +778,11 @@ typedef struct _fs_generic_reparse_buffer       _fs_generic_reparse_buffer;
 #define _FS_TRUNCATE_AVAILABLE
 #endif
 
-#if (_FS_GLIBC(2, 12) && (_FS_POSIX >= 200809L || _FS_XOPEN >= 700)) || (!_FS_GLIBC(2, 20) && (_FS_BSD || defined(_SVID_SOURCE)))
+/* Check if 'st_mtime' is defined since old glibc versions define _BSD_SOURCE and
+ * _SVID_SOURCE even outside BSD contextes. The 'st_mtime' is defined by the
+ * standard both on Posix and BSD.
+ */
+#if (_FS_GLIBC(2, 12) && (_FS_POSIX >= 200809L || _FS_XOPEN >= 700)) || (!_FS_GLIBC(2, 20) && (_FS_BSD || defined(_SVID_SOURCE))) && defined(st_mtime)
 #define _FS_STATUS_MTIM_AVAILABLE
 #endif
 
@@ -783,19 +799,6 @@ typedef struct _fs_generic_reparse_buffer       _fs_generic_reparse_buffer;
 #include <sys/sendfile.h>
 #endif
 #endif /* __linux__ */
-
-#ifdef _FS_64BIT
-#define _FILE_OFFSET_BITS 64
-#endif /* _FS_64BIT */
-
-#include <sys/statvfs.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <unistd.h>
-#include <limits.h>
-#include <dirent.h>
-#include <fcntl.h>
 
 #ifndef PATH_MAX
 #define PATH_MAX 4096
