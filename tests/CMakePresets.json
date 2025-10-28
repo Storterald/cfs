@@ -44,7 +44,7 @@
       "generator": "Visual Studio 17 2022",
       "cacheVariables": {
         "CMAKE_C_COMPILER": "cl",
-        "CMAKE_CXX_COMPILER": "cl"
+        "CMAKE_C_FLAGS": "/W4 /Wall /WX"
       },
       "condition": {
         "type": "equals",
@@ -75,7 +75,7 @@
           "toolchain": "MinGW Clang"
         },
         "microsoft.com/VisualStudioSettings/CMake/1.0": {
-          "intelliSenseMode": "linux-clang-x64"
+          "intelliSenseMode": "windows-clang-x64"
         }
       }
     },

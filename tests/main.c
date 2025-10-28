@@ -42,10 +42,11 @@ TEST(fs_absolute, existent_path)
         EXPECT_TRUE(fs_path_is_absolute(result, NULL));
         EXPECT_TRUE(fs_equivalent(result, path, NULL));
 
-        expected = TEST_ROOT FS_MAKE_PATH("/a/b/c/d/file1.txt");
+        expected = _FS_DUP(TEST_ROOT FS_MAKE_PATH("/a/b/c/d/file1.txt"));
         fs_path_make_preferred(&expected, NULL);
         EXPECT_EQ_PATH(result, expected);
 
+        free(expected);
         free(result);
 }
 
@@ -62,10 +63,11 @@ TEST(fs_absolute, nonexistent_path)
 
         EXPECT_TRUE(fs_path_is_absolute(result, NULL));
 
-        expected = TEST_ROOT FS_MAKE_PATH("/a/nonexistent/c/d");
+        expected = _FS_DUP(TEST_ROOT FS_MAKE_PATH("/a/nonexistent/c/d"));
         fs_path_make_preferred(&expected, NULL);
         EXPECT_EQ_PATH(result, expected);
 
+        free(expected);
         free(result);
 }
 
@@ -83,10 +85,11 @@ TEST(fs_absolute, long_path)
         EXPECT_TRUE(fs_path_is_absolute(result, NULL));
         EXPECT_TRUE(fs_equivalent(result, path, NULL));
 
-        expected = TEST_ROOT FS_MAKE_PATH("/") EXISTENT_LONG_PATH;
+        expected = _FS_DUP(TEST_ROOT FS_MAKE_PATH("/") EXISTENT_LONG_PATH);
         fs_path_make_preferred(&expected, NULL);
         EXPECT_EQ_PATH(result, expected);
 
+        free(expected);
         free(result);
 }
 
@@ -103,10 +106,11 @@ TEST(fs_absolute, nonexistent_long_path)
 
         EXPECT_TRUE(fs_path_is_absolute(result, NULL));
 
-        expected = TEST_ROOT FS_MAKE_PATH("/") NONEXISTENT_LONG_PATH;
+        expected = _FS_DUP(TEST_ROOT FS_MAKE_PATH("/") NONEXISTENT_LONG_PATH);
         fs_path_make_preferred(&expected, NULL);
         EXPECT_EQ_PATH(result, expected);
 
+        free(expected);
         free(result);
 }
 
@@ -151,10 +155,11 @@ TEST(fs_canonical, existent_path)
         EXPECT_TRUE(fs_path_is_absolute(result, NULL));
         EXPECT_TRUE(fs_equivalent(path, result, NULL));
 
-        expected = TEST_ROOT FS_MAKE_PATH("/a/b/e");
+        expected = _FS_DUP(TEST_ROOT FS_MAKE_PATH("/a/b/e"));
         fs_path_make_preferred(&expected, NULL);
         EXPECT_EQ_PATH(result, expected);
 
+        free(expected);
         free(result);
 }
 
@@ -169,10 +174,11 @@ TEST(fs_canonical, existent_symlink_path)
         result = fs_canonical(path, &e);
         FS_EXPECT_NO_EC(e);
 
-        expected = TEST_ROOT FS_MAKE_PATH("/j/file6.txt");
+        expected = _FS_DUP(TEST_ROOT FS_MAKE_PATH("/j/file6.txt"));
         fs_path_make_preferred(&expected, NULL);
         EXPECT_EQ_PATH(result, expected);
 
+        free(expected);
         free(result);
 }
 
@@ -251,10 +257,11 @@ TEST(fs_weakly_canonical, nonexistent_path)
 
         EXPECT_TRUE(fs_path_is_absolute(result, NULL));
 
-        expected = TEST_ROOT FS_MAKE_PATH("/a/nonexistent");
+        expected = _FS_DUP(TEST_ROOT FS_MAKE_PATH("/a/nonexistent"));
         fs_path_make_preferred(&expected, NULL);
         EXPECT_EQ_PATH(result, expected);
 
+        free(expected);
         free(result);
 }
 
@@ -271,10 +278,11 @@ TEST(fs_weakly_canonical, nonexistent_symlink_path)
 
         EXPECT_TRUE(fs_path_is_absolute(result, NULL));
 
-        expected = TEST_ROOT FS_MAKE_PATH("/a/nonexistent");
+        expected = _FS_DUP(TEST_ROOT FS_MAKE_PATH("/a/nonexistent"));
         fs_path_make_preferred(&expected, NULL);
         EXPECT_EQ_PATH(result, expected);
 
+        free(expected);
         free(result);
 }
 
@@ -304,10 +312,11 @@ TEST(fs_relative, base_in_path)
         check = fs_path_append(base, result, NULL);
         EXPECT_TRUE(fs_equivalent(path, check, NULL));
 
-        expected = FS_MAKE_PATH("c/d/file1.txt");
+        expected = fs_make_path("c/d/file1.txt");
         fs_path_make_preferred(&expected, NULL);
         EXPECT_EQ_PATH(result, expected);
 
+        free(expected);
         free(result);
         free(check);
 }
@@ -328,10 +337,11 @@ TEST(fs_relative, base_not_in_path)
         check = fs_path_append(base, result, NULL);
         EXPECT_TRUE(fs_equivalent(path, check, NULL));
 
-        expected = FS_MAKE_PATH("../a/b/c/d/file1.txt");
+        expected = fs_make_path("../a/b/c/d/file1.txt");
         fs_path_make_preferred(&expected, NULL);
         EXPECT_EQ_PATH(result, expected);
 
+        free(expected);
         free(result);
         free(check);
 }
@@ -352,10 +362,11 @@ TEST(fs_relative, through_symlink)
         check = fs_path_append(base, result, NULL);
         EXPECT_TRUE(fs_equivalent(path, check, NULL));
 
-        expected = FS_MAKE_PATH("../../j/file7.txt");
+        expected = fs_make_path("../../j/file7.txt");
         fs_path_make_preferred(&expected, NULL);
         EXPECT_EQ_PATH(result, expected);
 
+        free(expected);
         free(result);
         free(check);
 }
@@ -415,10 +426,11 @@ TEST(fs_proximate, base_in_path)
         check = fs_path_append(base, result, NULL);
         EXPECT_TRUE(fs_equivalent(path, check, NULL));
 
-        expected = FS_MAKE_PATH("c/d/file1.txt");
+        expected = fs_make_path("c/d/file1.txt");
         fs_path_make_preferred(&expected, NULL);
         EXPECT_EQ_PATH(result, expected);
 
+        free(expected);
         free(result);
         free(check);
 }
@@ -439,18 +451,19 @@ TEST(fs_proximate, base_not_in_path)
         check = fs_path_append(base, result, NULL);
         EXPECT_TRUE(fs_equivalent(path, check, NULL));
 
-        expected = FS_MAKE_PATH("../a/b/c/d/file1.txt");
+        expected = fs_make_path("../a/b/c/d/file1.txt");
         fs_path_make_preferred(&expected, NULL);
         EXPECT_EQ_PATH(result, expected);
 
+        free(expected);
         free(result);
         free(check);
 }
 
 TEST(fs_proximate, through_symlink)
 {
-        const fs_path path = "./a/b/c/../../sym/file7.txt";
-        const fs_path base = "./a/b";
+        const fs_path path = FS_MAKE_PATH("./a/b/c/../../sym/file7.txt");
+        const fs_path base = FS_MAKE_PATH("./a/b");
 
         fs_path       result;
         fs_path       check1;
@@ -2250,7 +2263,7 @@ TEST(fs_recursive_directory_iterator, contains_all_entries_recursively_in_direct
 TODO test opts for fs_recursive_directory_iterator
 */
 
-#ifdef CFS_TEST_PRINT_ENV
+#ifdef FS_TEST_PRINT_ENV
 static void _print_test_env(void)
 {
 #ifndef _WIN32
@@ -2270,7 +2283,30 @@ static void _print_test_env(void)
                 gnu_get_libc_version());
 #endif /* !_WIN32 */
 }
-#endif /* CFS_TEST_PRINT_ENV */
+#endif /* FS_TEST_PRINT_ENV */
+
+#ifdef _WIN32
+BOOL _is_admin(void)
+{
+        BOOL elevated = FALSE;
+
+        HANDLE          token;
+        DWORD           returnedSize;
+        TOKEN_ELEVATION elevation;
+
+        if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token))
+                return FALSE;
+
+        if (!GetTokenInformation(token, TokenElevation, &elevation, sizeof(elevation), &returnedSize))
+                goto err;
+
+        elevated = elevation.TokenIsElevated;
+
+err:
+        CloseHandle(token);
+        return elevated;
+}
+#endif /* _WIN32 */
 
 static void _create_file(const char *path)
 {
@@ -2314,7 +2350,14 @@ static void _prepare_env(void)
 
 int main(void)
 {
-#ifdef CFS_TEST_PRINT_ENV
+#ifdef _WIN32
+        if (!_is_admin()) {
+                printf("Tests must be run with administrator privileges on Windows.\n");
+                return 1;
+        }
+#endif
+
+#ifdef FS_TEST_PRINT_ENV
         _print_test_env();
 #endif
         _prepare_env();

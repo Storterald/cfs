@@ -14,12 +14,17 @@ endif ()
 
 if (MSVC)
     target_compile_definitions(cfs_test PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_options(cfs_test PRIVATE
+            "/wd4668" # Disabled due to WinAPI
+            "/wd4820" # Implicit padding
+            "/wd5045" # Spectre mitigation
+    )
 endif ()
 
 if (USE_COLORS)
-    target_compile_definitions(cfs_test PRIVATE CFS_TESTS_USE_COLORS)
+    target_compile_definitions(cfs_test PRIVATE FS_TESTS_USE_COLORS)
 endif ()
 
 if (PRINT_ENV)
-    target_compile_definitions(cfs_test PRIVATE CFS_TEST_PRINT_ENV)
+    target_compile_definitions(cfs_test PRIVATE FS_TEST_PRINT_ENV)
 endif ()
