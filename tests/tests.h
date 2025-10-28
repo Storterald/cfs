@@ -48,7 +48,7 @@ extern int RUN_ALL_TESTS(void);
 extern void _add_test(const char *name, int (*cb)(void));
 
 #define TEST(__function_name__, __use__)                                        \
-static void __function_name__##_##__use__(int *);                               \
+static void _##__function_name__##_##__use__(int *);                            \
 static int _##__function_name__##_##__use__##_test(void) {                      \
         const char *__test_id = _FS_TESTS_STRINGIFY(__function_name__.__use__); \
                                                                                 \
@@ -62,7 +62,7 @@ static int _##__function_name__##_##__use__##_test(void) {                      
         start = clock();                                                        \
                                                                                 \
         ret = 0;                                                                \
-        __function_name__##_##__use__(&ret);                                    \
+        _##__function_name__##_##__use__(&ret);                                 \
                                                                                 \
         end     = clock();                                                      \
         elapsed = (int)((end - start) * 1000.0 / CLOCKS_PER_SEC);               \
@@ -82,7 +82,7 @@ static int _##__function_name__##_##__use__##_test(void) {                      
                 return 0;                                                       \
         }                                                                       \
 }                                                                               \
-static void __function_name__##_##__use__(int *__ret)
+static void _##__function_name__##_##__use__(int *__ret)
 
 #define REGISTER_TEST(__function_name__, __use__) _add_test(_FS_TESTS_STRINGIFY(__function_name__), _##__function_name__##_##__use__##_test)
 
@@ -100,6 +100,14 @@ do {                                                            \
         }                                                       \
 } while (0)
 
+#define EXPECT_NE(a, b)                                         \
+do {                                                            \
+        if (*__ret != 1 && (a) == (b)) {                        \
+                printf("%s:%d: Failure\n", __FILE__, __LINE__); \
+                *__ret = 2;                                     \
+        }                                                       \
+} while (0)
+
 #define EXPECT_EQ_PATH(a, b)                                                                                    \
 do {                                                                                                            \
         if (*__ret != 1 && fs_path_compare(a, b, NULL) != 0) {                                                  \
@@ -109,9 +117,17 @@ do {                                                                            
         }                                                                                                       \
 } while (0)
 
-#define EXPECT_TRUE(a)                                          \
+#define EXPECT_TRUE(__exp__)                                    \
 do {                                                            \
-        if (*__ret != 1 && !(a)) {                              \
+        if (*__ret != 1 && !(__exp__)) {                        \
+                printf("%s:%d: Failure\n", __FILE__, __LINE__); \
+                *__ret = 2;                                     \
+        }                                                       \
+} while (0)
+
+#define EXPECT_FALSE(__exp__)                                   \
+do {                                                            \
+        if (*__ret != 1 && (__exp__)) {                         \
                 printf("%s:%d: Failure\n", __FILE__, __LINE__); \
                 *__ret = 2;                                     \
         }                                                       \

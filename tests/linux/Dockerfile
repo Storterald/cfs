@@ -9,6 +9,6 @@ COPY tests/main.c  /app
 COPY tests/tests.h /app
 COPY tests/cfs/    /app/cfs
 
-CMD gcc main.c -o tests -DCFS_TESTS_USE_COLORS -DCFS_TEST_PRINT_ENV -D_GNU_SOURCE -D_TEST_ROOT=\"/app/TestRoot\" && \
-    echo "" &&                                                                                                      \
+CMD gcc main.c -o tests -DFS_TESTS_USE_COLORS -DFS_TEST_PRINT_ENV -D_GNU_SOURCE -D_TEST_ROOT=\"/app/TestRoot\" && \
+    echo "" &&                                                                                                    \
     ./tests
