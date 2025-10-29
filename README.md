@@ -1,7 +1,7 @@
 > ⚠️ Warning<br>
 > The library is currently being tested.
 
-# CFS: cross-platform filesystem API in C99
+# CFS: cross-platform filesystem API in C89
 
 A single header implementation of `std::filesystem`/`Boost.Filesystem` in `C89`.
 
