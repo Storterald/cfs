@@ -12,8 +12,11 @@ A single header implementation of `std::filesystem`/`Boost.Filesystem` in `C89`.
 ### Usage:
 
 ```c++
+// This should be done in a source file, not a header file.
+
 // #define _GNU_SOURCE (recommended, not required in C++). This
-//  should be ideally defined as a compiler definition, not using a #define. 
+//  should be defined as a compiler definition, not using a #define.
+//  If defined in a .c file, it should be above all #includes.
 
 #define CFS_IMPLEMENTATION
 #include <cfs/cfs.h>
