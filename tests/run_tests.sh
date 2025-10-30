@@ -4,7 +4,7 @@ passed=0
 total=0
 failed=()
 
-function run_test {
+function run_linux_test {
   ((++total))
 
   if docker image inspect "$1" > /dev/null 2>&1; then
@@ -12,7 +12,11 @@ function run_test {
     echo ""
   fi
 
-  docker build -f $2/Dockerfile .. --tag $1 --platform=$4 --build-arg BASE_IMAGE=$3
+  docker build -f linux/Dockerfile .. --tag $1 --platform=$3 --build-arg BASE_IMAGE=$2
+  if test $? -ne 0; then
+    echo "Errors in tests from: $1. Could not build docker image."
+    failed+=("$1")
+  fi
   echo ""
 
   echo "Running tests from: $1..."
@@ -57,18 +61,17 @@ function end_tests {
 
 begin_tests
 
-run_test debian_potato/i386    linux debian/eol:potato   linux/i386
-run_test debian_woody/i386     linux debian/eol:woody    linux/i386
-run_test debian_etch/i386      linux debian/eol:etch     linux/i386
-run_test debian_etch/amd64     linux debian/eol:etch     linux/amd64
-run_test debian_lenny/amd64    linux debian/eol:lenny    linux/amd64
-run_test debian_squeeze/amd64  linux debian/eol:squeeze  linux/amd64
-run_test debian_wheezy/amd64   linux debian/eol:wheezy   linux/amd64
-run_test debian_jessie/amd64   linux debian/eol:jessie   linux/amd64
-run_test debian_stretch/amd64  linux debian/eol:stretch  linux/amd64
-run_test debian_buster/amd64   linux debian/eol:buster   linux/amd64
-run_test debian_bullseye/amd64 linux debian/eol:bullseye linux/amd64
-run_test debian_bookworm/amd64 linux debian:bookworm     linux/amd64
-run_test debian_trixie/amd64   linux debian:trixie       linux/amd64
+run_linux_test debian_potato   debian/eol:potato   linux/i386
+run_linux_test debian_woody    debian/eol:woody    linux/i386
+run_linux_test debian_etch     debian/eol:etch     linux/i386
+run_linux_test debian_lenny    debian/eol:lenny    linux/amd64
+run_linux_test debian_squeeze  debian/eol:squeeze  linux/amd64
+run_linux_test debian_wheezy   debian/eol:wheezy   linux/amd64
+run_linux_test debian_jessie   debian/eol:jessie   linux/amd64
+run_linux_test debian_stretch  debian/eol:stretch  linux/amd64
+run_linux_test debian_buster   debian/eol:buster   linux/amd64
+run_linux_test debian_bullseye debian/eol:bullseye linux/amd64
+run_linux_test debian_bookworm debian:bookworm     linux/amd64
+run_linux_test debian_trixie   debian:trixie       linux/amd64
 
 end_tests

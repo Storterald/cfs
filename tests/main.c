@@ -165,6 +165,10 @@ TEST(fs_canonical, existent_path)
 
 TEST(fs_canonical, existent_symlink_path)
 {
+#ifndef _FS_SYMLINKS_SUPPORTED
+        SKIP_TEST();
+#endif
+
         const fs_path path = FS_MAKE_PATH("./a/b/./c/d/../.././../../k/file6.txt");
 
         fs_path       result;
@@ -225,6 +229,10 @@ TEST(fs_weakly_canonical, existent_path)
 
 TEST(fs_weakly_canonical, existent_symlink_path)
 {
+#ifndef _FS_SYMLINKS_SUPPORTED
+        SKIP_TEST();
+#endif
+
         const fs_path path = FS_MAKE_PATH("./l/a/b/c/../e/././file3.txt");
 
         fs_path       result;
@@ -267,6 +275,10 @@ TEST(fs_weakly_canonical, nonexistent_path)
 
 TEST(fs_weakly_canonical, nonexistent_symlink_path)
 {
+#ifndef _FS_SYMLINKS_SUPPORTED
+        SKIP_TEST();
+#endif
+
         const fs_path path = FS_MAKE_PATH("./l/a/b/../nonexistent");
 
         fs_path       result;
@@ -348,6 +360,10 @@ TEST(fs_relative, base_not_in_path)
 
 TEST(fs_relative, through_symlink)
 {
+#ifndef _FS_SYMLINKS_SUPPORTED
+        SKIP_TEST();
+#endif
+
         const fs_path path = FS_MAKE_PATH("./a/b/c/../../sym/file7.txt");
         const fs_path base = FS_MAKE_PATH("./a/b");
 
@@ -464,6 +480,10 @@ TEST(fs_proximate, base_not_in_path)
 
 TEST(fs_proximate, through_symlink)
 {
+#ifndef _FS_SYMLINKS_SUPPORTED
+        SKIP_TEST();
+#endif
+
         const fs_path path = FS_MAKE_PATH("./a/b/c/../../sym/file7.txt");
         const fs_path base = FS_MAKE_PATH("./a/b");
 
@@ -580,6 +600,10 @@ TEST(fs_copy, non_empty_directory)
 
 TEST(fs_copy, symlink)
 {
+#ifndef _FS_SYMLINKS_SUPPORTED
+        SKIP_TEST();
+#endif
+
         const fs_path src = FS_MAKE_PATH("./k");
         const fs_path dst = FS_MAKE_PATH("./playground/fs_copy_symlink");
 
@@ -597,7 +621,7 @@ TEST(fs_copy, symlink)
 TEST(fs_copy, empty_src)
 {
         const fs_path src = FS_MAKE_PATH("");
-        const fs_path dst = FS_MAKE_PATH("./playground/fs_copy_symlink");
+        const fs_path dst = FS_MAKE_PATH("./j");
 
         fs_error_code e;
 
@@ -618,6 +642,10 @@ TEST(fs_copy, empty_dst)
 
 TEST(fs_copy_opt, copy_symlink)
 {
+#ifndef _FS_SYMLINKS_SUPPORTED
+        SKIP_TEST();
+#endif
+
         const fs_path src = FS_MAKE_PATH("./a/sym");
         const fs_path dst = FS_MAKE_PATH("./playground/fs_copy_opt_copy_symlink");
 
@@ -634,6 +662,10 @@ TEST(fs_copy_opt, copy_symlink)
 
 TEST(fs_copy_opt, skip_symlink)
 {
+#ifndef _FS_SYMLINKS_SUPPORTED
+        SKIP_TEST();
+#endif
+
         const fs_path src = FS_MAKE_PATH("./a/sym");
         const fs_path dst = FS_MAKE_PATH("./playground/fs_copy_opt_skip_symlink");
 
@@ -667,6 +699,10 @@ TEST(fs_copy_opt, recursive)
 
 TEST(fs_copy_opt, recursive_with_symlink_in_sub_dir)
 {
+#ifndef _FS_SYMLINKS_SUPPORTED
+        SKIP_TEST();
+#endif
+
         const fs_path src = FS_MAKE_PATH("./a");
         const fs_path dst = FS_MAKE_PATH("./playground/fs_copy_opt_recursive_with_symlink_in_sub_dir");
 
@@ -685,6 +721,10 @@ TEST(fs_copy_opt, recursive_with_symlink_in_sub_dir)
 
 TEST(fs_copy_opt, recursive_with_copy_symlink)
 {
+#ifndef _FS_SYMLINKS_SUPPORTED
+        SKIP_TEST();
+#endif
+
         const fs_path src          = FS_MAKE_PATH("./a");
         const fs_path dst          = FS_MAKE_PATH("./playground/fs_copy_opt_recursive_with_copy_symlink");
         const fs_copy_options opts = fs_copy_options_recursive | fs_copy_options_copy_symlinks;
@@ -711,6 +751,10 @@ TEST(fs_copy_opt, recursive_with_copy_symlink)
 
 TEST(fs_copy_opt, recursive_with_skip_symlink)
 {
+#ifndef _FS_SYMLINKS_SUPPORTED
+        SKIP_TEST();
+#endif
+
         const fs_path src          = FS_MAKE_PATH("./a");
         const fs_path dst          = FS_MAKE_PATH("./playground/fs_copy_opt_recursive_with_skip_symlink");
         const fs_copy_options opts = fs_copy_options_recursive | fs_copy_options_skip_symlinks;
@@ -737,6 +781,10 @@ TEST(fs_copy_opt, recursive_with_skip_symlink)
 
 TEST(fs_copy_opt, recursive_with_directories_only)
 {
+#ifndef _FS_SYMLINKS_SUPPORTED
+        SKIP_TEST();
+#endif
+
         const fs_path src          = FS_MAKE_PATH("./a");
         const fs_path dst          = FS_MAKE_PATH("./playground/fs_copy_opt_recursive_with_directories_only");
         const fs_copy_options opts = fs_copy_options_recursive | fs_copy_options_directories_only;
@@ -764,6 +812,10 @@ TEST(fs_copy_opt, recursive_with_directories_only)
 
 TEST(fs_copy_opt, create_symlink_on_directory)
 {
+#ifndef _FS_SYMLINKS_SUPPORTED
+        SKIP_TEST();
+#endif
+
         const fs_path src = FS_MAKE_PATH("./a");
         const fs_path dst = FS_MAKE_PATH("./playground/fs_copy_opt_create_symlink_on_directory");
 
@@ -775,6 +827,10 @@ TEST(fs_copy_opt, create_symlink_on_directory)
 
 TEST(fs_copy_opt, create_symlink_on_file)
 {
+#ifndef _FS_SYMLINKS_SUPPORTED
+        SKIP_TEST();
+#endif
+
         const fs_path src = FS_MAKE_PATH("./a/b/c/d/file0.txt");
         const fs_path dst = FS_MAKE_PATH("./playground/fs_copy_opt_create_symlink_on_file");
 
@@ -964,7 +1020,7 @@ TEST(fs_copy_opt, update_existing_older)
 TEST(fs_copy_opt, empty_src)
 {
         const fs_path src = FS_MAKE_PATH("");
-        const fs_path dst = FS_MAKE_PATH("./playground/fs_copy_symlink");
+        const fs_path dst = FS_MAKE_PATH("./j");
 
         fs_error_code e;
 
@@ -2326,6 +2382,40 @@ TODO test opts for fs_recursive_directory_iterator
 */
 
 #ifdef FS_TEST_PRINT_ENV
+#ifdef _WIN32
+static const char *_get_windows_name()
+{
+        OSVERSIONINFOEX osvi = {0};
+
+        DWORD major;
+        DWORD minor;
+        DWORD build;
+
+        osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
+        if (!GetVersionEx((OSVERSIONINFO*)&osvi))
+                return "Unknown Windows";
+
+        major = osvi.dwMajorVersion;
+        minor = osvi.dwMinorVersion;
+        build = osvi.dwBuildNumber;
+
+        if (major == 5 && minor == 1)
+                return "Windows XP";
+        else if (major == 6 && minor == 0)
+                return "Windows Vista";
+        else if (major == 6 && minor == 1)
+                return "Windows 7";
+        else if (major == 6 && minor == 2)
+                return "Windows 8";
+        else if (major == 6 && minor == 3)
+                return "Windows 8.1";
+        else if (major == 10)
+                return "Windows 10 / 11+";
+        else
+                return "Unknown or newer Windows";
+}
+#endif /* !_WIN32 */
+
 static void _print_test_env(void)
 {
 #ifndef _WIN32
@@ -2334,15 +2424,34 @@ static void _print_test_env(void)
 
         printf("Running main() from %s\n", __FILE__);
 
-#ifndef _WIN32
+#ifdef _WIN32
+        printf("System info:\n"
+               "  Windows version: %s\n"
+               "  Bits:            %s\n\n",
+               _get_windows_name(),
+#ifdef _FS_64BIT
+               "64"
+#else
+               "32"
+#endif
+               );
+
+#else /* !_WIN32 */
         if (uname(&name))
                 return;
 
         printf("System info:\n"
-               "  linux kernel:  %s\n"
-               "  glibc version: %s\n\n",
+               "  Linux kernel:  %s\n"
+               "  Glibc version: %s\n"
+               "  Bits:          %s\n\n",
                 name.release,
-                gnu_get_libc_version());
+                gnu_get_libc_version(),
+#ifdef _FS_64BIT
+               "64"
+#else
+               "32"
+#endif
+               );
 #endif /* !_WIN32 */
 }
 #endif /* FS_TEST_PRINT_ENV */
@@ -2412,7 +2521,7 @@ static void _prepare_env(void)
 
 int main(void)
 {
-#ifdef _WIN32
+#if defined(_WIN32) && defined(_FS_SYMLINKS_SUPPORTED)
         if (!_is_admin()) {
                 printf("Tests must be run with administrator privileges on Windows.\n");
                 return 1;

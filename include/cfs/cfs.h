@@ -1774,10 +1774,12 @@ static DWORD _win32_get_temp_path(DWORD len, LPWSTR buf)
         return GetTempPathW(len, buf);
 }
 
+#ifdef _FS_SYMLINKS_SUPPORTED
 static BOOL _win32_device_io_control(HANDLE handle, DWORD code, LPVOID inbuf, DWORD insize, LPVOID outbuf, DWORD outsize, LPDWORD bytes, LPOVERLAPPED overlapped)
 {
         return DeviceIoControl(handle, code, inbuf, insize, outbuf, outsize, bytes, overlapped);
 }
+#endif
 
 #ifdef _FS_WINDOWS_VISTA
 static BOOL _win32_get_file_information_by_handle_ex(HANDLE handle, FILE_INFO_BY_HANDLE_CLASS class, LPVOID buf, DWORD size)
@@ -2459,13 +2461,13 @@ static _fs_stat _win32_get_file_stat(fs_cpath p, _fs_stats_flag flags, fs_error_
 {
         _fs_stat out = {0};
 
+        HANDLE handle;
+
 #ifdef _FS_SYMLINKS_SUPPORTED
         const fs_bool follow        = _FS_ANY_FLAG_SET(flags, _fs_stats_flag_Follow_symlinks);
         const _fs_file_flags fflags = follow ?
                 _fs_file_flags_Backup_semantics :
                 _fs_file_flags_Backup_semantics | _fs_file_flags_Open_reparse_point;
-
-        HANDLE handle;
 #else
         const fs_bool follow = FS_FALSE;
 #endif
@@ -2818,12 +2820,18 @@ static int _get_recursive_entries(const fs_cpath p, fs_cpath **buf, int *const a
 #define _relative_path_contains_root_name _win32_relative_path_contains_root_name
 #define FS_REMOVE_DIR(p)                  _win32_remove_directory(p)
 #define FS_DELETE_FILE(p)                 _win32_delete_file(p)
-#define FS_DELETE_SYMLINK(p)              _win32_delete_symlink(p)
 #else
 #define _relative_path_contains_root_name(p) FS_FALSE
 #define FS_REMOVE_DIR(p)                     (!_posix_rmdir(p))
 #define FS_DELETE_FILE(p)                    (!_posix_remove(p))
-#define FS_DELETE_SYMLINK(p)                 (!_posix_unlink(p))
+#endif
+
+#ifdef _FS_SYMLINKS_SUPPORTED
+#ifdef _WIN32
+#define FS_DELETE_SYMLINK(p) _win32_delete_symlink(p)
+#else
+#define FS_DELETE_SYMLINK(p) (!_posix_unlink(p))
+#endif
 #endif
 
 extern fs_path fs_make_path(const char *p)
@@ -4281,10 +4289,13 @@ extern fs_bool fs_remove(const fs_cpath p, fs_error_code *ec)
 
         st = fs_symlink_status(p, ec);
         if (fs_exists_s(st)) {
+#ifdef _FS_SYMLINKS_SUPPORTED
                 if (fs_is_symlink_s(st)) {
                         if (FS_DELETE_SYMLINK(p))
                                 return FS_TRUE;
-                } else if (fs_is_directory_s(st) || _is_junction_t(st.type)) {
+                } else
+#endif
+                if (fs_is_directory_s(st) || _is_junction_t(st.type)) {
                         if (FS_REMOVE_DIR(p))
                                 return FS_TRUE;
                 } else {
@@ -4383,7 +4394,9 @@ extern void fs_resize_file(const fs_cpath p, const fs_umax size, fs_error_code *
 {
 #ifdef _WIN32
         HANDLE                handle;
+#ifdef _FS_FILE_END_OF_FILE_AVAILABLE
         FILE_END_OF_FILE_INFO info;
+#endif
 #endif
 
         _FS_CLEAR_ERROR_CODE(ec);
@@ -4571,9 +4584,7 @@ extern fs_file_status fs_symlink_status(const fs_cpath p, fs_error_code *ec)
 #ifdef _FS_SYMLINKS_SUPPORTED
         return _symlink_status(p, NULL, ec);
 #else
-        (void)p;
-        _FS_CFS_ERROR(ec, fs_cfs_error_function_not_supported);
-        return ret;
+        return _status(p, NULL, ec);
 #endif
 }
 
