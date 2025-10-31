@@ -9,7 +9,7 @@
  - [X] Make sure every call that returns path handles resizes (with for (;;) or similar)
  - [ ] Don't precompute all directory iterators members
  - [X] Fix mixed styling
- - [X] Add '\\?\' if a path is > **MAX_PATH** on *Windows*
+ - [X] Add '\\\\?\\' if a path is > **MAX_PATH** on *Windows*
  - [X] System error enums (*Windows* and *Posix*)
 
 # Version 1.0.0-alpha
