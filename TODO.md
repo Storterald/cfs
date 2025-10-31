@@ -3,7 +3,6 @@
  - [ ] Optimize functions avoiding multiple equal parsing calls
  - [X] Tests
  - [X] Rewrite in **C90** / **ANSI C**
- - [ ] GitHub actions for *Windows*, *Linux* and *macOS*
  - [ ] Verify allocations
  - [X] Check parameters
  - [X] Verify minimum OS version off all API calls used (*Windows*, *Linux*, *macOS*, *BSD*)
