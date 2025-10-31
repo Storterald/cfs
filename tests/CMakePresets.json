@@ -9,8 +9,8 @@
     {
       "name": "common",
       "hidden": true,
-      "binaryDir": "${sourceDir}/build/${presetName}",
-      "installDir": "${sourceDir}/build/${presetName}",
+      "binaryDir": "${sourceDir}/.build/${presetName}",
+      "installDir": "${sourceDir}/.build/${presetName}",
       "cacheVariables": {
         "CMAKE_C_STANDARD": "90",
         "CMAKE_C_STANDARD_REQUIRED": "ON"

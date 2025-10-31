@@ -60,19 +60,10 @@ function run_windows_test {
       --wait-stderr                           \
       --timeout 30000                         \
       -- /c "$1"
-    echo ""
   }
 
   function _shutdown {
     VBoxManage controlvm "$vm" acpipowerbutton
-    echo ""
-  }
-
-  function _remove_share {
-    VBoxManage sharedfolder remove "$vm"  \
-      --name $shared                      \
-      --transient
-    echo ""
   }
 
   VBoxManage startvm "$vm" --type headless
@@ -98,7 +89,8 @@ function run_windows_test {
     --name $shared                  \
     --hostpath "$cfs_dir"           \
     --transient                     \
-    --automount
+    --automount                     \
+    --readonly
   if test $? -ne 0; then
     echo "Errors in tests from: $vm. Could not add shared folder."
     failed+=("$vm")
@@ -111,19 +103,16 @@ function run_windows_test {
   sleep 10  # TODO: reliable wait for complete boot
 
   _run_cmd "mkdir C:\\cfs\\tests"
-  _run_cmd "xcopy \\\\vboxsvr\\CFSTestShare\\tests\\* C:\\cfs\\tests\\ /E /H /C /I /K /Y"
+  _run_cmd "xcopy \\\\vboxsvr\\CFSTestShare\\tests\\* C:\\cfs\\tests\\ /E /C /I /Y"
   if test $? -ne 0; then
     echo "Errors in tests from: $vm. Could copy shared folder."
     failed+=("$vm")
 
     _run_cmd "rmdir /S /Q C:\\cfs"
-    _remove_share
     _shutdown
     return
   fi
   echo ""
-
-  _remove_share
 
   _run_cmd "C:\\cfs\\tests\\windows\\run_test.bat"
   if test $? -eq 0; then
@@ -142,6 +131,11 @@ function run_windows_test {
 function begin_tests {
   clear
   printf "[%s] \e[4;34m%s\x1b[0m Running tests...\n\n" "$(date +%H:%M:%S)" "${BASH_SOURCE[0]}"
+  echo ""
+
+  cd "$(dirname BASH_SOURCE[0])" || exit
+  echo ""
+
   start=$(date +%s%3N)
 }
 
@@ -163,7 +157,6 @@ function end_tests {
 
 begin_tests
 
-
 run_linux_test debian_potato/i386    debian/eol:potato   linux/i386
 run_linux_test debian_woody/i386     debian/eol:woody    linux/i386
 run_linux_test debian_etch/i386      debian/eol:etch     linux/i386
@@ -180,5 +173,14 @@ run_linux_test debian_trixie/amd64   debian:trixie       linux/amd64
 run_windows_test "Windows 2000 32-bit"  Administrator 1234
 run_windows_test "Windows XP 32-bit"    Administrator 1234
 run_windows_test "Windows Vista 32-bit" storto        1234
+run_windows_test "Windows 7 32-bit"     storto        1234
+run_windows_test "Windows 7 64-bit"     storto        1234
+run_windows_test "Windows 8 32-bit"     storto        1234
+run_windows_test "Windows 8 64-bit"     storto        1234
+run_windows_test "Windows 8.1 32-bit"   storto        1234
+run_windows_test "Windows 8.1 64-bit"   storto        1234
+run_windows_test "Windows 10 32-bit"    storto        1234
+run_windows_test "Windows 10 64-bit"    storto        1234
+run_windows_test "Windows 11 64-bit"    storto        1234
 
 end_tests

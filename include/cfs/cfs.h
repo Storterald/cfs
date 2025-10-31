@@ -6,7 +6,6 @@ extern "C" {
 #endif
 
 #include <stddef.h>
-#include <errno.h>
 #include <time.h>
 
 typedef char     fs_bool;
@@ -49,6 +48,8 @@ typedef enum fs_win_errors {
 
 } fs_win_errors;
 #else /* !_WIN32 */
+#include <errno.h>
+
 #define FS_CHAR char
 #define FS_PREFERRED_SEPARATOR '/'
 #define FS_PREFERRED_SEPARATOR_S "/"
@@ -114,14 +115,14 @@ typedef uint32_t       fs_uint;
 #ifdef _WIN32
 #include <BaseTsd.h>
 typedef UINT64 fs_umax;
-typedef INT32  fs_uint;
+typedef UINT32 fs_uint;
 #else
 typedef unsigned long fs_umax;
 typedef unsigned int  fs_uint;
 #endif
 #else /* !_FS_64BIT */
-typedef unsigned long  fs_umax;
-typedef unsigned long  fs_uint;
+typedef unsigned long fs_umax;
+typedef unsigned long fs_uint;
 #endif /* !_FS_64BIT */
 #define FS_UINTMAX_MAX ((fs_umax)~((fs_umax)0))
 #define FS_SIZE_MAX    ((fs_umax)(FS_UINTMAX_MAX >> 1))
@@ -227,15 +228,15 @@ typedef enum fs_error_type {
 } fs_error_type;
 
 typedef enum fs_cfs_error {
-        fs_cfs_error_success                   = 0,
-        fs_cfs_error_no_such_file_or_directory = ENOENT,
-        fs_cfs_error_file_exists               = EEXIST,
-        fs_cfs_error_not_a_directory           = ENOTDIR,
-        fs_cfs_error_is_a_directory            = EISDIR,
-        fs_cfs_error_invalid_argument          = EINVAL,
-        fs_cfs_error_name_too_long             = ENAMETOOLONG,
-        fs_cfs_error_function_not_supported    = ENOTSUP,
-        fs_cfs_error_loop                      = ELOOP
+        fs_cfs_error_success                   =  0,
+        fs_cfs_error_no_such_file_or_directory =  2, /* ENOENT */
+        fs_cfs_error_file_exists               = 17, /* EEXIST */
+        fs_cfs_error_not_a_directory           = 20, /* ENOTDIR */
+        fs_cfs_error_is_a_directory            = 21, /* EISDIR */
+        fs_cfs_error_invalid_argument          = 22, /* EINVAL */
+        fs_cfs_error_name_too_long             = 36, /* ENAMETOOLONG */
+        fs_cfs_error_loop                      = 40, /* ELOOP */
+        fs_cfs_error_function_not_supported    = 95  /* ENOTSUP */
 
 } fs_cfs_error;
 
@@ -513,9 +514,19 @@ static fs_error_code _fs_internal_error = {0};
 
 #ifdef _WIN32
 #include <Windows.h>
-#include <shlobj.h> /* SHCreateDirectoryExW */
 
-#if defined(_WIN32_WINNT) && _WIN32_WINNT >= 0x0600
+#ifdef _WIN32_WINNT
+#define _FS_WINNT _WIN32_WINNT
+#else
+#define _FS_WINNT 0
+#endif
+
+#if _FS_WINNT >= 0x0500
+#include <shlobj.h>
+#define _FS_SH_CREATE_DIRECTORY_AVAILABLE
+#endif
+
+#if _FS_WINNT >= 0x0600
 #define _FS_WINDOWS_VISTA
 #define _FS_FILE_END_OF_FILE_AVAILABLE
 #define _FS_SYMLINKS_SUPPORTED
@@ -539,6 +550,7 @@ static fs_error_code _fs_internal_error = {0};
 
 #define _FS_GET_SYSTEM_ERROR() GetLastError()
 
+#ifdef _FS_WINDOWS_VISTA
 typedef enum _fs_path_kind {
         _fs_path_kind_Dos  = VOLUME_NAME_DOS,
         _fs_path_kind_Guid = VOLUME_NAME_GUID,
@@ -546,6 +558,9 @@ typedef enum _fs_path_kind {
         _fs_path_kind_None = VOLUME_NAME_NONE
 
 } _fs_path_kind;
+#else
+typedef DWORD _fs_path_kind;
+#endif /* _FS_WINDOWS_VISTA */
 
 typedef enum _fs_access_rights {
         _fs_access_rights_Delete                = DELETE,
@@ -1566,10 +1581,12 @@ static BOOL _win32_create_directory(const LPCWSTR name, const LPSECURITY_ATTRIBU
         return ret;
 }
 
+#ifdef _FS_SH_CREATE_DIRECTORY_AVAILABLE
 static int _win32_sh_create_directory_ex_w(const HWND window, const LPCWSTR name, const SECURITY_ATTRIBUTES *const sa)
 {
         return SHCreateDirectoryExW(window, name, sa);
 }
+#endif
 
 static BOOL _win32_create_hard_link(const LPCWSTR link, const LPCWSTR target, const LPSECURITY_ATTRIBUTES sa)
 {
@@ -1851,12 +1868,11 @@ static HANDLE _win32_get_handle(fs_cpath p, _fs_access_rights rights, _fs_file_f
 
 static fs_path _win32_get_final_path(fs_cpath p, _fs_path_kind *pkind, fs_error_code *ec)
 {
-        _fs_path_kind kind = _fs_path_kind_Dos;
-
         DWORD   len;
         fs_path buf;
 
 #ifdef _FS_WINDOWS_VISTA
+        _fs_path_kind kind = _fs_path_kind_Dos;
         const HANDLE hFile = _win32_get_handle(
                 p, _fs_access_rights_File_read_attributes,
                 _fs_file_flags_Backup_semantics, ec);
@@ -1900,9 +1916,8 @@ static fs_path _win32_get_final_path(fs_cpath p, _fs_path_kind *pkind, fs_error_
 
 #ifdef _FS_WINDOWS_VISTA
         _win32_close_handle(hFile);
-#endif /* _FS_WINDOWS_VISTA */
-
         *pkind = kind;
+#endif /* _FS_WINDOWS_VISTA */
         return buf;
 }
 
@@ -1922,7 +1937,7 @@ static void _win32_change_file_permissions(fs_cpath p, fs_bool follow, fs_bool r
                         | _fs_access_rights_File_write_attributes;
                 const HANDLE handle           = _win32_get_handle(
                         p, flags, _fs_file_flags_Backup_semantics, ec);
-                
+
                 FILE_BASIC_INFO infos;
 
                 if (_FS_IS_ERROR_SET(ec))
@@ -1964,12 +1979,12 @@ static fs_path _win32_read_symlink(fs_cpath p, fs_error_code *ec)
                 | _fs_file_flags_Open_reparse_point;
         const HANDLE hFile = _win32_get_handle(
                 p, _fs_access_rights_File_read_attributes, flags, ec);
-        
+
         wchar_t                 buf[MAXIMUM_REPARSE_DATA_BUFFER_SIZE];
         USHORT                  len;
         const wchar_t           *offset;
         _fs_reparse_data_buffer *rdata;
-        
+
         if (_FS_IS_ERROR_SET(ec))
                 return NULL;
 
@@ -2930,11 +2945,13 @@ extern fs_path fs_canonical(const fs_cpath p, fs_error_code *ec)
 #ifdef _WIN32
         const wchar_t pref[] = L"\\\\?\\GLOBALROOT";
 
-        _fs_path_kind kind;
         fs_path       finalp;
+        _fs_path_kind kind;
         _fs_char_it   buf;
         size_t        len;
         wchar_t       *out;
+        wchar_t       *output;
+
 #elif defined(_FS_REALPATH_AVAILABLE)
         fs_path abs;
         char    fbuf[PATH_MAX];
@@ -2967,8 +2984,10 @@ extern fs_path fs_canonical(const fs_cpath p, fs_error_code *ec)
                 return NULL;
 
         buf = finalp;
+#ifdef _FS_WINDOWS_VISTA
         if (kind == _fs_path_kind_Dos) {
-                wchar_t *output = buf;
+#endif
+                output = buf;
 
                 if (wcsncmp(finalp, L"\\\\?\\", 4) == 0 && _win32_is_drive(finalp + 4)) {
                         output += 4;
@@ -2981,7 +3000,9 @@ extern fs_path fs_canonical(const fs_cpath p, fs_error_code *ec)
                 output = _FS_WDUP(output);
                 free(finalp);
                 return output;
+#ifdef _FS_WINDOWS_VISTA
         }
+#endif
 
         len = sizeof(pref) / sizeof(wchar_t);
         out = malloc((len + wcslen(buf)) * sizeof(wchar_t));
@@ -3578,7 +3599,7 @@ extern fs_bool fs_create_directories(const fs_cpath p, fs_error_code *ec)
         if (_FS_IS_ERROR_SET(ec))
                 return FS_FALSE;
 
-#ifdef _WIN32
+#ifdef _FS_SH_CREATE_DIRECTORY_AVAILABLE
         if (wcslen(abs) < 248) {
                 /* If the length of abs is less than 248, it means GetFullPathNameW
                  * was internally used, which makes all separators the preferred
@@ -3593,7 +3614,7 @@ extern fs_bool fs_create_directories(const fs_cpath p, fs_error_code *ec)
                 }
                 return FS_TRUE;
         }
-#endif /* _WIN32 */
+#endif /* _FS_SH_CREATE_DIRECTORY_AVAILABLE */
 
         it       = fs_path_begin(abs, NULL);
         current  = fs_path_root_path(abs, NULL);

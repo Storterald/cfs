@@ -2,9 +2,6 @@
 .idea/
 .vscode/
 
-# Output
-build/
-
 # Tests
-tests/TestRoot/
-**/tools/
+tests/.build/
+tests/.TestRoot/

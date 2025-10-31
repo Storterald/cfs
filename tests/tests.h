@@ -95,7 +95,7 @@ do {                                                    \
 
 #define EXPECT_EQ(a, b)                                         \
 do {                                                            \
-        if (*__ret != 1 && (a) != (b)) {                        \
+        if ((a) != (b)) {                                       \
                 printf("%s:%d: Failure\n", __FILE__, __LINE__); \
                 *__ret = 2;                                     \
         }                                                       \
@@ -103,7 +103,7 @@ do {                                                            \
 
 #define EXPECT_NE(a, b)                                         \
 do {                                                            \
-        if (*__ret != 1 && (a) == (b)) {                        \
+        if ((a) == (b)) {                                       \
                 printf("%s:%d: Failure\n", __FILE__, __LINE__); \
                 *__ret = 2;                                     \
         }                                                       \
@@ -111,7 +111,7 @@ do {                                                            \
 
 #define EXPECT_EQ_PATH(a, b)                                                                                    \
 do {                                                                                                            \
-        if (*__ret != 1 && fs_path_compare(a, b, NULL) != 0) {                                                  \
+        if (fs_path_compare(a, b, NULL) != 0) {                                                                 \
                 _FS_TESTS_PRINTF(_FS_TESTS_HS _FS_TESTS_FMT(":%d: Failure\nValue of: %s\nExpected: %s\n"),      \
                         __FILE__, __LINE__, a, b);                                                              \
                 *__ret = 2;                                                                                     \
@@ -120,7 +120,7 @@ do {                                                                            
 
 #define EXPECT_TRUE(__exp__)                                    \
 do {                                                            \
-        if (*__ret != 1 && !(__exp__)) {                        \
+        if (!(__exp__)) {                                       \
                 printf("%s:%d: Failure\n", __FILE__, __LINE__); \
                 *__ret = 2;                                     \
         }                                                       \
@@ -128,7 +128,7 @@ do {                                                            \
 
 #define EXPECT_FALSE(__exp__)                                   \
 do {                                                            \
-        if (*__ret != 1 && (__exp__)) {                         \
+        if (__exp__) {                                          \
                 printf("%s:%d: Failure\n", __FILE__, __LINE__); \
                 *__ret = 2;                                     \
         }                                                       \
