@@ -7,102 +7,136 @@ failed=()
 function run_linux_test {
   ((++total))
 
-  if docker image inspect "$1" > /dev/null 2>&1; then
-    docker image rm $1 -f
+  vm="$1"
+  img="$2"
+  plat="$3"
+
+  if docker image inspect "$vm" > /dev/null 2>&1; then
+    docker image rm "$vm" -f
     echo ""
   fi
 
-  docker build -f linux/Dockerfile .. --tag $1 --platform=$3 --build-arg BASE_IMAGE=$2
+  docker build -f linux/Dockerfile .. --tag $vm --platform=$plat --build-arg BASE_IMAGE=$img
   if test $? -ne 0; then
-    echo "Errors in tests from: $1. Could not build docker image."
-    failed+=("$1")
+    echo "Errors in tests from: $vm. Could not build docker image."
+    failed+=("$vm")
   fi
   echo ""
 
-  echo "Running tests from: $1..."
-  docker run --rm -it $1
+  echo "Running tests from: $vm..."
+  docker run --rm -it $vm
   result=$?
   echo ""
 
   if test $result -eq 0; then
-    echo "Successfully run tests from: $1."
+    echo "Successfully run tests from: $vm."
     ((++passed))
   else
-    echo "Errors in tests from: $1."
-    failed+=("$1")
+    echo "Errors in tests from: $vm."
+    failed+=("$vm")
   fi
   echo ""
 
-  docker image rm $1 -f
+  docker image rm $vm -f
   echo ""
 }
 
 function run_windows_test {
+  ((++total))
+
+  vm="$1"
+  user="$2"
+  pwd="$3"
+
   cfs_dir="$(dirname "$(dirname "$(readlink -fm "$0")")")"
   shared=CFSTestShare
 
   function _run_cmd {
-    VBoxManage guestcontrol "$1" run          \
+    VBoxManage guestcontrol "$vm" run         \
       --exe "C:\\Windows\\System32\\cmd.exe"  \
-      --username Administrator                \
-      --password 1234                         \
+      --username "$user"                      \
+      --password "$pwd"                       \
       --wait-stdout                           \
       --wait-stderr                           \
       --timeout 30000                         \
-      -- /c "$2"
+      -- /c "$1"
+    echo ""
   }
 
-  function _clear {
-    _run_cmd "$1" "net use X: /delete"
-    VBoxManage sharedfolder remove "$1" \
-      --name $shared                    \
+  function _shutdown {
+    VBoxManage controlvm "$vm" acpipowerbutton
+    echo ""
+  }
+
+  function _remove_share {
+    VBoxManage sharedfolder remove "$vm"  \
+      --name $shared                      \
       --transient
-    VBoxManage controlvm "$1" acpipowerbutton
+    echo ""
   }
 
-  VBoxManage startvm "$1"
+  VBoxManage startvm "$vm" --type headless
   if test $? -ne 0; then
-    echo "Errors in tests from: $1. Could not start vm."
-    failed+=("$1")
+    echo "Errors in tests from: $vm. Could not start vm."
+    failed+=("$vm")
     return
   fi
+  echo ""
 
-  VBoxManage guestproperty wait "$1" "/VirtualBox/GuestAdd/Revision" \
+  VBoxManage guestproperty wait "$vm" "/VirtualBox/GuestAdd/Revision" \
       --timeout 60000
+  if test $? -ne 0; then
+    echo "Error in tests from: $vm. Timed out waiting for guest additions"
+    failed+=("$vm")
 
-  VBoxManage sharedfolder add "$1"  \
+    _shutdown
+    return
+  fi
+  echo ""
+
+  VBoxManage sharedfolder add "$vm" \
     --name $shared                  \
     --hostpath "$cfs_dir"           \
     --transient                     \
     --automount
   if test $? -ne 0; then
-    echo "Errors in tests from: $1. Could not add shared folder."
-    failed+=("$1")
-    VBoxManage controlvm "$1" acpipowerbutton
+    echo "Errors in tests from: $vm. Could not add shared folder."
+    failed+=("$vm")
+
+    _shutdown
     return
-  fi
-
-  _run_cmd "$1" "net use X: \\\\vboxsvr\\CFSTestShare"
-  if test $? -ne 0; then
-    echo "Errors in tests from: $1. Could not alias shared folder."
-    failed+=("$1")
-    _clear "$1"
-    return
-  fi
-
-  sleep 10  # TODO: reliable wait for complete boot
-
-  _run_cmd "$1" "X:\\tests\\windows\\run_test.bat"
-  if test $? -eq 0; then
-    echo "Successfully run tests from: $1."
-    ((++passed))
-  else
-    echo "Errors in tests from: $1."
-    failed+=("$1")
   fi
   echo ""
 
-  _clear "$1"
+  sleep 10  # TODO: reliable wait for complete boot
+
+  _run_cmd "mkdir C:\\cfs\\tests"
+  _run_cmd "xcopy \\\\vboxsvr\\CFSTestShare\\tests\\* C:\\cfs\\tests\\ /E /H /C /I /K /Y"
+  if test $? -ne 0; then
+    echo "Errors in tests from: $vm. Could copy shared folder."
+    failed+=("$vm")
+
+    _run_cmd "rmdir /S /Q C:\\cfs"
+    _remove_share
+    _shutdown
+    return
+  fi
+  echo ""
+
+  _remove_share
+
+  _run_cmd "C:\\cfs\\tests\\windows\\run_test.bat"
+  if test $? -eq 0; then
+    echo "Successfully run tests from: $vm."
+    ((++passed))
+  else
+    echo "Errors in tests from: $vm."
+    failed+=("$vm")
+  fi
+  echo ""
+
+  _run_cmd "rmdir /S /Q C:\\cfs"
+  _shutdown
 }
 
 function begin_tests {
@@ -129,6 +163,7 @@ function end_tests {
 
 begin_tests
 
+
 run_linux_test debian_potato/i386    debian/eol:potato   linux/i386
 run_linux_test debian_woody/i386     debian/eol:woody    linux/i386
 run_linux_test debian_etch/i386      debian/eol:etch     linux/i386
@@ -142,6 +177,8 @@ run_linux_test debian_bullseye/amd64 debian/eol:bullseye linux/amd64
 run_linux_test debian_bookworm/amd64 debian:bookworm     linux/amd64
 run_linux_test debian_trixie/amd64   debian:trixie       linux/amd64
 
-run_windows_test "Windows XP 32-bit"
+run_windows_test "Windows 2000 32-bit"  Administrator 1234
+run_windows_test "Windows XP 32-bit"    Administrator 1234
+run_windows_test "Windows Vista 32-bit" storto        1234
 
 end_tests

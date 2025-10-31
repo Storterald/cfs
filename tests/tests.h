@@ -90,6 +90,7 @@ static void _##__function_name__##_##__use__(int *__ret)
 do {                                                    \
         printf("%s:%d: Skipped\n", __FILE__, __LINE__); \
         *__ret = 1;                                     \
+        return;                                         \
 } while (0)
 
 #define EXPECT_EQ(a, b)                                         \
