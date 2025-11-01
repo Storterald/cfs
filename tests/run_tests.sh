@@ -47,6 +47,7 @@ function run_windows_test {
   vm="$1"
   user="$2"
   pwd="$3"
+  winnt=$4
 
   cfs_dir="$(dirname "$(dirname "$(readlink -fm "$0")")")"
   shared=CFSTestShare
@@ -114,7 +115,7 @@ function run_windows_test {
   fi
   echo ""
 
-  _run_cmd "C:\\cfs\\tests\\windows\\run_test.bat"
+  _run_cmd "C:\\cfs\\tests\\windows\\run_test.bat $winnt"
   if test $? -eq 0; then
     echo "Successfully run tests from: $vm."
     ((++passed))
@@ -170,17 +171,17 @@ run_linux_test debian_bullseye/amd64 debian/eol:bullseye linux/amd64
 run_linux_test debian_bookworm/amd64 debian:bookworm     linux/amd64
 run_linux_test debian_trixie/amd64   debian:trixie       linux/amd64
 
-run_windows_test "Windows 2000 32-bit"  Administrator 1234
-run_windows_test "Windows XP 32-bit"    Administrator 1234
-run_windows_test "Windows Vista 32-bit" storto        1234
-run_windows_test "Windows 7 32-bit"     storto        1234
-run_windows_test "Windows 7 64-bit"     storto        1234
-run_windows_test "Windows 8 32-bit"     storto        1234
-run_windows_test "Windows 8 64-bit"     storto        1234
-run_windows_test "Windows 8.1 32-bit"   storto        1234
-run_windows_test "Windows 8.1 64-bit"   storto        1234
-run_windows_test "Windows 10 32-bit"    storto        1234
-run_windows_test "Windows 10 64-bit"    storto        1234
-run_windows_test "Windows 11 64-bit"    storto        1234
+run_windows_test "Windows 2000 32-bit"  Administrator 1234 0x0500
+run_windows_test "Windows XP 32-bit"    Administrator 1234 0x0501
+run_windows_test "Windows Vista 32-bit" storto        1234 0x0600
+run_windows_test "Windows 7 32-bit"     storto        1234 0x0601
+run_windows_test "Windows 7 64-bit"     storto        1234 0x0601
+run_windows_test "Windows 8 32-bit"     storto        1234 0x0602
+run_windows_test "Windows 8 64-bit"     storto        1234 0x0602
+run_windows_test "Windows 8.1 32-bit"   storto        1234 0x0603
+run_windows_test "Windows 8.1 64-bit"   storto        1234 0x0603
+run_windows_test "Windows 10 32-bit"    storto        1234 0x0A00
+run_windows_test "Windows 10 64-bit"    storto        1234 0x0A00
+run_windows_test "Windows 11 64-bit"    storto        1234 0x0A00
 
 end_tests

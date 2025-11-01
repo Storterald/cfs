@@ -14,21 +14,24 @@ A single header implementation of `std::filesystem`/`Boost.Filesystem` in `C89`.
 ```c++
 // This should be done in a source file, not a header file.
 
+// For Linux:
 // #define _GNU_SOURCE (recommended, not required in C++). This
 //  should be defined as a compiler definition, not using a #define.
 //  If defined in a .c file, it should be above all #includes.
+
+// For Windows:
+//  Be sure to use a toolchain that automatically defines _WIN32_WINNT
+//  to enable symlinks.
 
 #define CFS_IMPLEMENTATION
 #include <cfs/cfs.h>
 ```
 
-### OS support
+### OS requirements
 
-| Windows          | Linux                                   | BSD      | macOS X (Darwin) |
-|:-----------------|:----------------------------------------|:---------|:-----------------|
-| Windows **XP***+ | Kernel **2.0.38**+<br/>Glibc **2.1.3**+ | **4.2**+ | Darwin **1.0**+  |
-
-\* Symlinks are only supported on Windows **Vista** and above.
+| Windows          | Linux                                 | BSD     | macOS X (Darwin) |
+|:-----------------|:--------------------------------------|:--------|:-----------------|
+| Windows **2000** | Kernel **2.0.38**<br/>Glibc **2.1.3** | **4.2** | Darwin **1.0**   |
 
 ## Differences with std::filesystem
 
