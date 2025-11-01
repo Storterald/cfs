@@ -16,6 +16,7 @@ if (MSVC)
     target_compile_definitions(cfs_test PRIVATE _CRT_SECURE_NO_WARNINGS)
     target_compile_options(cfs_test PRIVATE
             "/wd4668" # Disabled due to WinAPI
+            "/wd4996" # Deprecation warning
             "/wd4820" # Implicit padding
             "/wd5045" # Spectre mitigation
     )

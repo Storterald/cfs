@@ -45,8 +45,10 @@ static void _write_file(const fs_cpath path, const char *text)
         char *tmp = fs_path_get(path);
         FILE *f   = fopen(tmp, "w");
 
-        fwrite(text, sizeof(char), strlen(text), f);
-        fclose(f);
+        if (f) {
+                fwrite(text, sizeof(char), strlen(text), f);
+                fclose(f);
+        }
 
         free(tmp);
 }
@@ -2440,29 +2442,27 @@ static const char *_get_windows_name(void)
 
         DWORD major;
         DWORD minor;
-        DWORD build;
 
         osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
-        if (!GetVersionEx((OSVERSIONINFO*)&osvi))
+        if (!GetVersionExA((OSVERSIONINFO*)&osvi))
                 return "Unknown Windows";
 
         major = osvi.dwMajorVersion;
         minor = osvi.dwMinorVersion;
-        build = osvi.dwBuildNumber;
 
         if (major == 5 && minor == 0)
                 return "Windows 2000";
-        else if (major == 5 && minor == 1)
+        if (major == 5 && minor == 1)
                 return "Windows XP";
-        else if (major == 6 && minor == 0)
+        if (major == 6 && minor == 0)
                 return "Windows Vista";
-        else if (major == 6 && minor == 1)
+        if (major == 6 && minor == 1)
                 return "Windows 7";
-        else if (major == 6 && minor == 2)
+        if (major == 6 && minor == 2)
                 return "Windows 8";
-        else if (major == 6 && minor == 3)
+        if (major == 6 && minor == 3)
                 return "Windows 8.1";
-        else if (major == 10)
+        if (major == 10)
                 return "Windows 10 / 11+";
 
         return "Unknown Windows";
@@ -2518,7 +2518,7 @@ BOOL _is_admin(void)
         if (!GetTokenInformation(token, TokenElevation, &elevation, sizeof(elevation), &returnedSize))
                 goto err;
 
-        elevated = elevation.TokenIsElevated;
+        elevated = (BOOL)elevation.TokenIsElevated;
 
 err:
         CloseHandle(token);

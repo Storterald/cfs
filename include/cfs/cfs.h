@@ -2591,19 +2591,23 @@ static fs_file_time_type _win32_filetime_to_unix(FILETIME ft)
 
         tmp = (((ULONGLONG)ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
 
-        ret.nanoseconds = (tmp % 10000000UL) * 100;
-        ret.seconds     = tmp / 10000000UL;
+        ret.nanoseconds = (tmp % 10000000) * 100;
+        ret.seconds     = (time_t)(tmp / 10000000);
         return ret;
 }
 
 static FILETIME _win32_unix_to_filetime(const fs_file_time_type ft)
 {
-        const ULONGLONG tmp = ft.seconds * 10000000UL + ft.nanoseconds / 100;
+        const ULONGLONG tmp = (ULONGLONG)ft.seconds * 10000000 + (ULONGLONG)ft.nanoseconds / 100;
 
         FILETIME ret;
+        DWORD    carry;
 
-        ret.dwLowDateTime  = tmp & 0xFFFFFFFF;
-        ret.dwHighDateTime = tmp >> 32;
+        memcpy(&ret, &tmp, sizeof(ULONGLONG));
+        carry = 0xFFFFFFFF - _FS_UNIX_FILETIME_DIFF_LOW < ret.dwLowDateTime ? 1 : 0;
+
+        ret.dwLowDateTime  += _FS_UNIX_FILETIME_DIFF_LOW;
+        ret.dwHighDateTime += _FS_UNIX_FILETIME_DIFF_HIGH + carry;
         return ret;
 }
 #endif /* !_WIN32 */
