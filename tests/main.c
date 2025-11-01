@@ -1251,99 +1251,111 @@ TEST(fs_copy_symlink, on_directory)
         FS_EXPECT_EC(e, fs_error_type_cfs, fs_cfs_error_invalid_argument);
 }
 
-/*
 TEST(fs_create_directory, new_directory)
 {
-        const fs_path dir = "./playground/fs_create_directory_new_directory";
-        fs_error_code e;
+        const fs_path dir = FS_MAKE_PATH("./playground/fs_create_directory_new_directory");
 
-        const fs_bool created = fs_create_directory(dir, &e);
-        FS_EXPECT_NO_EC(e);
-        EXPECT_TRUE(created);
+        EXPECT_TRUE(fs_create_directory(dir, NULL));
+        EXPECT_TRUE(fs_is_directory(dir, NULL));
 
-        EXPECT_TRUE(fs_is_directory(dir, &e));
-        fs_remove(dir, &e);
-        FS_EXPECT_NO_EC(e);
+        fs_remove(dir, NULL);
 }
 
 TEST(fs_create_directory, existing_directory)
 {
-        const fs_path dir = "./playground";
+        const fs_path dir = FS_MAKE_PATH("./playground");
+
         fs_error_code e;
 
-        const fs_bool created = fs_create_directory(dir, &e);
+        EXPECT_FALSE(fs_create_directory(dir, &e));
         FS_EXPECT_NO_EC(e);
-        EXPECT_FALSE(created);
 }
 
-TEST(fs_create_directory_cp, copy_existing)
+TEST(fs_create_directory_cp, new_directory)
 {
-        const fs_path dst = "./playground/new_dir_cp";
-        const fs_path src = "./h";
+        const fs_path dst = FS_MAKE_PATH("./playground/new_dir_cp");
+        const fs_path src = FS_MAKE_PATH("./h");
+
+        EXPECT_TRUE(fs_create_directory_cp(dst, src, NULL));
+        EXPECT_TRUE(fs_is_directory(dst, NULL));
+
+        fs_remove(dst, NULL);
+}
+
+TEST(fs_create_directory_cp, existing_directory)
+{
+        const fs_path dst = FS_MAKE_PATH("./j");
+        const fs_path src = FS_MAKE_PATH("./h");
+
         fs_error_code e;
 
-        const fs_bool created = fs_create_directory_cp(dst, src, &e);
-        FS_EXPECT_NO_EC(e);
-        EXPECT_TRUE(created);
-
-        EXPECT_TRUE(fs_is_directory(dst, &e));
-        fs_remove(dst, &e);
+        EXPECT_FALSE(fs_create_directory_cp(dst, src, &e));
         FS_EXPECT_NO_EC(e);
 }
 
 TEST(fs_create_directories, nested_path)
 {
-        const fs_path dir  = "./playground/nested1/nested2/nested3";
-        const fs_path base = "./playground/nested1";
+        const fs_path dir  = FS_MAKE_PATH("./playground/nested1/nested2/nested3");
+        const fs_path base = FS_MAKE_PATH("./playground/nested1");
+
         fs_error_code e;
+        fs_bool       created;
 
-        const fs_bool created = fs_create_directories(dir, &e);
-        FS_EXPECT_NO_EC(e);
+        created = fs_create_directories(dir, &e);
         EXPECT_TRUE(created);
-
-        EXPECT_TRUE(fs_is_directory(dir, &e));
-        fs_remove_all(base, &e);
         FS_EXPECT_NO_EC(e);
+
+        EXPECT_TRUE(fs_is_directory(dir, NULL));
+
+        fs_remove_all(base, NULL);
 }
 
 TEST(fs_create_directories, non_nested_path)
 {
-        const fs_path dir  = "./playground/nested1";
-        const fs_path base = "./playground/nested1";
+        const fs_path dir  = FS_MAKE_PATH("./playground/nested1");
+        const fs_path base = FS_MAKE_PATH("./playground/nested1");
+
         fs_error_code e;
+        fs_bool       created;
 
-        const fs_bool created = fs_create_directories(dir, &e);
-        FS_EXPECT_NO_EC(e);
+        created = fs_create_directories(dir, &e);
         EXPECT_TRUE(created);
-
-        EXPECT_TRUE(fs::is_directory(dir));
-        fs_remove_all(base, &e);
         FS_EXPECT_NO_EC(e);
+
+        EXPECT_TRUE(fs_is_directory(dir, NULL));
+
+        fs_remove_all(base, NULL);
 }
 
 TEST(fs_create_directories, long_path)
 {
-        const fs_path dir  = "./playground/nested1/nested2/nested3/nested4/nested5/nested6/nested7/nested8/nested9/nested10/nested11/nested12/nested13/nested14/nested15/nested16/nested17/nested18/nested19/nested20/nested21/nested22/nested23/nested24/nested25/nested26/nested27/nested28/nested29/nested30";
-        const fs_path base = "./playground/nested1";
+        const fs_path dir  = FS_MAKE_PATH("./playground/nested1/nested2/nested3/nested4/nested5/nested6/nested7/nested8/nested9/nested10/nested11/nested12/nested13/nested14/nested15/nested16/nested17/nested18/nested19/nested20/nested21/nested22/nested23/nested24/nested25/nested26/nested27/nested28/nested29/nested30");
+        const fs_path base = FS_MAKE_PATH("./playground/nested1");
+
         fs_error_code e;
+        fs_bool       created;
 
-        const fs_bool created = fs_create_directories(dir, &e);
-        FS_EXPECT_NO_EC(e);
+        created = fs_create_directories(dir, &e);
         EXPECT_TRUE(created);
+        FS_EXPECT_NO_EC(e);
 
-        EXPECT_TRUE(fs_is_directory(dir, &e));
-        fs_remove_all(base, &e);
+        EXPECT_TRUE(fs_is_directory(dir, NULL));
+
+        fs_remove_all(base, NULL);
 }
 
 TEST(fs_create_hard_link, to_file)
 {
-        const fs_path target = "./j/file6.txt";
-        const fs_path link   = "./playground/fs_create_hard_link_to_file";
+        const fs_path target = FS_MAKE_PATH("./j/file6.txt");
+        const fs_path link   = FS_MAKE_PATH("./playground/fs_create_hard_link_to_file");
+
         fs_error_code e;
 
-        target.create_file() << "" << std::flush;
+        fs_umax links;
 
-        const uintmax_t links = fs_hard_link_count(target, &e);
+        _create_file(target);
+
+        links = fs_hard_link_count(target, &e);
         FS_EXPECT_NO_EC(e);
 
         fs_create_hard_link(target, link, &e);
@@ -1352,14 +1364,14 @@ TEST(fs_create_hard_link, to_file)
         EXPECT_TRUE(fs_exists(link, &e));
         EXPECT_EQ(links + 1, fs_hard_link_count(target, &e));
 
-        fs_remove(link, &e);
-        FS_EXPECT_NO_EC(e);
+        fs_remove(link, NULL);
 }
 
 TEST(fs_create_hard_link, to_directory)
 {
-        const fs_path target = "./playground/fs_create_hard_link_to_directory1";
-        const fs_path link   = "./playground/fs_create_hard_link_to_directory2";
+        const fs_path target = FS_MAKE_PATH("./playground/fs_create_hard_link_to_directory1");
+        const fs_path link   = FS_MAKE_PATH("./playground/fs_create_hard_link_to_directory2");
+
         fs_error_code e;
 
         fs_create_directory(target, &e);
@@ -1368,28 +1380,29 @@ TEST(fs_create_hard_link, to_directory)
         fs_create_hard_link(target, link, &e);
         FS_EXPECT_EC(e, fs_error_type_cfs, fs_cfs_error_is_a_directory);
 
-        fs_remove(target, &e);
-        FS_EXPECT_NO_EC(e);
+        fs_remove(target, NULL);
 }
 
 TEST(fs_create_symlink, normal_path)
 {
-        const fs_path target = "./h/file5.txt";
-        const fs_path link   = "./playground/fs_create_symlink_to_file";
+        const fs_path target = FS_MAKE_PATH("./h/file5.txt");
+        const fs_path link   = FS_MAKE_PATH("./playground/fs_create_symlink_to_file");
+
         fs_error_code e;
 
         fs_create_symlink(target, link, &e);
         FS_EXPECT_NO_EC(e);
 
         EXPECT_TRUE(fs_is_symlink(link, &e));
-        fs_remove(link, &e);
-        FS_EXPECT_NO_EC(e);
+
+        fs_remove(link, NULL);
 }
 
 TEST(fs_create_symlink, empty_target)
 {
-        const fs_path target = "";
-        const fs_path link   = "./playground/fs_create_symlink_empty_target";
+        const fs_path target = FS_MAKE_PATH("");
+        const fs_path link   = FS_MAKE_PATH("./playground/fs_create_symlink_empty_target");
+
         fs_error_code e;
 
         fs_create_symlink(target, link, &e);
@@ -1398,8 +1411,9 @@ TEST(fs_create_symlink, empty_target)
 
 TEST(fs_create_symlink, empty_link)
 {
-        const fs_path target = "./h/file5.txt";
-        const fs_path link   = "";
+        const fs_path target = FS_MAKE_PATH("./h/file5.txt");
+        const fs_path link   = FS_MAKE_PATH("");
+
         fs_error_code e;
 
         fs_create_symlink(target, link, &e);
@@ -1408,22 +1422,24 @@ TEST(fs_create_symlink, empty_link)
 
 TEST(fs_create_directory_symlink, normal_path)
 {
-        const fs_path target = "./h";
-        const fs_path link   = "./playground/fs_create_symlink_to_directory";
+        const fs_path target = FS_MAKE_PATH("./h");
+        const fs_path link   = FS_MAKE_PATH("./playground/fs_create_symlink_to_directory");
+
         fs_error_code e;
 
         fs_create_directory_symlink(target, link, &e);
         FS_EXPECT_NO_EC(e);
 
         EXPECT_TRUE(fs_is_symlink(link, &e));
-        fs_remove(link, &e);
-        FS_EXPECT_NO_EC(e);
+
+        fs_remove(link, NULL);
 }
 
 TEST(fs_create_directory_symlink, empty_target)
 {
-        const fs_path target = "";
-        const fs_path link   = "./playground/fs_create_directory_symlink_empty_target";
+        const fs_path target = FS_MAKE_PATH("");
+        const fs_path link   = FS_MAKE_PATH("./playground/fs_create_directory_symlink_empty_target");
+
         fs_error_code e;
 
         fs_create_symlink(target, link, &e);
@@ -1432,15 +1448,17 @@ TEST(fs_create_directory_symlink, empty_target)
 
 TEST(fs_create_directory_symlink, empty_link)
 {
-        const fs_path target = "./h";
-        const fs_path link   = "";
+        const fs_path target = FS_MAKE_PATH("./h");
+        const fs_path link   = FS_MAKE_PATH("");
+
         fs_error_code e;
 
         fs_create_symlink(target, link, &e);
         FS_EXPECT_EC(e, fs_error_type_cfs, fs_cfs_error_invalid_argument);
 }
 
-TEST(fs_current_path, correct)
+/*
+TEST(fs_current_path, is_correct)
 {
         fs_error_code e;
 
@@ -2634,6 +2652,21 @@ int main(void)
         REGISTER_TEST(fs_copy_symlink, on_symlink);
         REGISTER_TEST(fs_copy_symlink, on_file);
         REGISTER_TEST(fs_copy_symlink, on_directory);
+        REGISTER_TEST(fs_create_directory, new_directory);
+        REGISTER_TEST(fs_create_directory, existing_directory);
+        REGISTER_TEST(fs_create_directory_cp, new_directory);
+        REGISTER_TEST(fs_create_directory_cp, existing_directory);
+        REGISTER_TEST(fs_create_directories, nested_path);
+        REGISTER_TEST(fs_create_directories, non_nested_path);
+        REGISTER_TEST(fs_create_directories, long_path);
+        REGISTER_TEST(fs_create_hard_link, to_file);
+        REGISTER_TEST(fs_create_hard_link, to_directory);
+        REGISTER_TEST(fs_create_symlink, normal_path);
+        REGISTER_TEST(fs_create_symlink, empty_target);
+        REGISTER_TEST(fs_create_symlink, empty_link);
+        REGISTER_TEST(fs_create_directory_symlink, normal_path);
+        REGISTER_TEST(fs_create_directory_symlink, empty_target);
+        REGISTER_TEST(fs_create_directory_symlink, empty_link);
 
         return RUN_ALL_TESTS();
 }
