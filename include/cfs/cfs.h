@@ -16,7 +16,7 @@ typedef char     fs_bool;
 #include <WinError.h>
 #include <wchar.h>
 
-#define FS_CHAR wchar_t
+typedef wchar_t fs_char;
 #define FS_PREFERRED_SEPARATOR (L'\\')
 #define FS_PREFERRED_SEPARATOR_S (L"\\")
 
@@ -50,7 +50,7 @@ typedef enum fs_win_errors {
 #else /* !_WIN32 */
 #include <errno.h>
 
-#define FS_CHAR char
+typedef char fs_char;
 #define FS_PREFERRED_SEPARATOR '/'
 #define FS_PREFERRED_SEPARATOR_S "/"
 
@@ -128,13 +128,14 @@ typedef unsigned long fs_uint;
 #define FS_SIZE_MAX    ((fs_umax)(FS_UINTMAX_MAX >> 1))
 #endif /* !__STDC_VERSION__ */
 
+typedef fs_char       *fs_path;
+typedef const fs_char *fs_cpath;
+
 typedef struct fs_file_time_type {
         time_t  seconds;
         fs_uint nanoseconds;
 
 } fs_file_time_type;
-typedef FS_CHAR *fs_path;
-typedef const FS_CHAR *fs_cpath;
 
 typedef enum fs_file_type {
         fs_file_type_none,
@@ -669,6 +670,62 @@ typedef struct _fs_symbolic_link_reparse_buffer _fs_symbolic_link_reparse_buffer
 typedef struct _fs_mount_point_reparse_buffer   _fs_mount_point_reparse_buffer;
 typedef struct _fs_generic_reparse_buffer       _fs_generic_reparse_buffer;
 #endif /* _FS_SYMLINKS_SUPPORTED */
+
+#define _FS_WIN32_API_CALL_FOO_BODY(__ret__, __foo__, __get_args__, __err__, __path__, __separator__)   \
+{                                                                                                       \
+        __ret__ ret;                                                                                    \
+                                                                                                        \
+        DWORD  err;                                                                                     \
+        LPWSTR unc;                                                                                     \
+                                                                                                        \
+        ret = __foo__ __get_args__(__path__);                                                           \
+        err    = GetLastError();                                                                        \
+        if (ret != __err__ || !_FS_IS_ERROR_EXCEED(err))                                                \
+                return ret;                                                                             \
+                                                                                                        \
+        unc = _win32_prepend_unc(__path__, __separator__);                                              \
+        if (!unc) {                                                                                     \
+                SetLastError(fs_win_error_filename_exceeds_range);                                      \
+                return __err__;                                                                         \
+        }                                                                                               \
+                                                                                                        \
+        ret = __foo__ __get_args__(unc);                                                                \
+        free(unc);                                                                                      \
+        return ret;                                                                                     \
+}
+
+#define _FS_WIN32_API_CALL_FOO_BODY2(__ret__, __foo__, __get_args__, __err__, __path1__, __path2__)     \
+{                                                                                                       \
+        __ret__ ret;                                                                                    \
+                                                                                                        \
+        DWORD  err;                                                                                     \
+        LPWSTR unc1;                                                                                    \
+        LPWSTR unc2;                                                                                    \
+                                                                                                        \
+        ret = __foo__ __get_args__(__path1__, __path2__);                                               \
+        err    = GetLastError();                                                                        \
+        if (ret != __err__ || !_FS_IS_ERROR_EXCEED(err))                                                \
+                return ret;                                                                             \
+                                                                                                        \
+        unc1 = _win32_prepend_unc(__path1__, FS_FALSE);                                                 \
+        if (!unc1) {                                                                                    \
+                SetLastError(fs_win_error_filename_exceeds_range);                                      \
+                return __err__;                                                                         \
+        }                                                                                               \
+                                                                                                        \
+        unc2 = _win32_prepend_unc(__path2__, FS_FALSE);                                                 \
+        if (!unc2) {                                                                                    \
+                SetLastError(fs_win_error_filename_exceeds_range);                                      \
+                free(unc1);                                                                             \
+                return __err__;                                                                         \
+        }                                                                                               \
+                                                                                                        \
+        ret = __foo__ __get_args__(unc1, unc2);                                                         \
+        free(unc1);                                                                                     \
+        free(unc2);                                                                                     \
+        return ret;                                                                                     \
+}
+
 #else /* !_WIN32 */
 #ifdef _FS_64BIT
 #define _FILE_OFFSET_BITS 64
@@ -926,8 +983,8 @@ fs_bool fs_is_##__what__(fs_cpath p, fs_error_code *ec)                         
 #define _FS_IS_ERROR_SET(ec)          ((ec)->type != fs_error_type_none)
 #define _FS_IS_SYSTEM_ERROR(ec)       ((ec)->type == fs_error_type_system)
 
-typedef FS_CHAR       *_fs_char_it;
-typedef const FS_CHAR *_fs_char_cit;
+typedef fs_char       *_fs_char_it;
+typedef const fs_char *_fs_char_cit;
 
 #define _has_root_name(p, rtnend)         ((p) != (rtnend))
 #define _has_root_dir(rtnend, rtdend)     ((rtnend) != (rtdend))
@@ -1105,7 +1162,7 @@ static fs_path _dupe_string(const fs_cpath first, const fs_cpath last)
                 return _FS_DUP(_FS_EMPTY);
 
         len  = last - first;
-        size = (len + 1) * sizeof(FS_CHAR);
+        size = (len + 1) * sizeof(fs_char);
 
         out = malloc(size);
         memcpy(out, first, size);
@@ -1130,7 +1187,7 @@ static int _compare_time(const fs_file_time_type *const t1, const fs_file_time_t
         return -1;
 }
 
-static fs_bool _is_separator(const FS_CHAR c)
+static fs_bool _is_separator(const fs_char c)
 {
 #ifdef _WIN32
         return c == L'\\' || c == L'/';
@@ -1143,7 +1200,7 @@ static fs_bool _is_separator(const FS_CHAR c)
 
 static fs_bool _win32_is_drive(const fs_cpath p)
 {
-        const wchar_t first = p[0] | (L'a' - L'A');
+        const WCHAR first = p[0] | (L'a' - L'A');
         return first >= L'a' && first <= L'z' && p[1] == L':';
 }
 
@@ -1387,49 +1444,13 @@ static LPWSTR _win32_prepend_unc(const LPCWSTR path, const fs_bool separate)
         return unc;
 }
 
+#define _FS_WIN32_CREATE_FILE_MAKE_ARGS(__path__) (__path__, access, share, sa, disposition, flagattr, template)
 static HANDLE _win32_create_file(const LPCWSTR name, const DWORD access, const DWORD share, const LPSECURITY_ATTRIBUTES sa, const DWORD disposition, const DWORD flagattr, const HANDLE template)
-{
-        HANDLE handle;
-        DWORD  err;
-        LPWSTR unc;
+_FS_WIN32_API_CALL_FOO_BODY(HANDLE, CreateFileW, _FS_WIN32_CREATE_FILE_MAKE_ARGS, INVALID_HANDLE_VALUE, name, FS_FALSE)
 
-        handle = CreateFileW(name, access, share, sa, disposition, flagattr, template);
-        err    = GetLastError();
-        if (handle != INVALID_HANDLE_VALUE || !_FS_IS_ERROR_EXCEED(err))
-                return handle;
-
-        unc = _win32_prepend_unc(name, FS_FALSE);
-        if (!unc) {
-                SetLastError(fs_win_error_filename_exceeds_range);
-                return INVALID_HANDLE_VALUE;
-        }
-
-        handle = CreateFileW(unc, access, share, sa, disposition, flagattr, template);
-        free(unc);
-        return handle;
-}
-
+#define _FS_WIN32_FIND_FIRST_MAKE_ARGS(__path__) (__path__, data)
 static HANDLE _win32_find_first(const LPCWSTR name, const LPWIN32_FIND_DATAW data)
-{
-        HANDLE handle;
-        DWORD  err;
-        LPWSTR unc;
-
-        handle = FindFirstFileW(name, data);
-        err    = GetLastError();
-        if (handle != INVALID_HANDLE_VALUE || !_FS_IS_ERROR_EXCEED(err))
-                return handle;
-
-        unc = _win32_prepend_unc(name, FS_FALSE);
-        if (!unc) {
-                SetLastError(fs_win_error_filename_exceeds_range);
-                return INVALID_HANDLE_VALUE;
-        }
-
-        handle = FindFirstFileW(unc, data);
-        free(unc);
-        return handle;
-}
+_FS_WIN32_API_CALL_FOO_BODY(HANDLE, FindFirstFileW, _FS_WIN32_FIND_FIRST_MAKE_ARGS, INVALID_HANDLE_VALUE, name, FS_FALSE)
 
 static BOOL _win32_find_next(const HANDLE handle, const LPWIN32_FIND_DATAW data)
 {
@@ -1444,6 +1465,7 @@ static BOOL _win32_find_close(const HANDLE handle)
 static DWORD _win32_get_full_path_name(const LPCWSTR name, const DWORD len, const LPWSTR buf, LPWSTR *const filepart)
 {
         DWORD         req;
+
         DWORD         err;
         fs_error_code e;
         fs_path       cur;
@@ -1463,6 +1485,8 @@ static DWORD _win32_get_full_path_name(const LPCWSTR name, const DWORD len, cons
         fs_path_append_s(&cur, name, NULL);
         wcsncpy(buf, cur, len);
 
+        /* TODO: add unc here */
+
         req = (DWORD)wcslen(cur) + 1;
         free(cur);
         return req;
@@ -1473,113 +1497,25 @@ static BOOL _win32_close_handle(const HANDLE handle)
         return CloseHandle(handle);
 }
 
+#define _FS_WIN32_GET_FILE_ATTRIBUTES_MAKE_ARGS(__path__) (__path__)
 static DWORD _win32_get_file_attributes(const LPCWSTR name)
-{
-        DWORD  attrs;
-        DWORD  err;
-        LPWSTR unc;
-        
-        attrs = GetFileAttributesW(name);
-        err   = GetLastError();
-        if (attrs != _fs_file_attr_Invalid || !_FS_IS_ERROR_EXCEED(err))
-                return attrs;
+_FS_WIN32_API_CALL_FOO_BODY(DWORD, GetFileAttributesW, _FS_WIN32_GET_FILE_ATTRIBUTES_MAKE_ARGS, _fs_file_attr_Invalid, name, FS_FALSE)
 
-        unc = _win32_prepend_unc(name, FS_FALSE);
-        if (!unc)
-                return attrs;
-
-        attrs = GetFileAttributesW(unc);
-        free(unc);
-        return attrs;
-}
-
+#define _FS_WIN32_SET_FILE_ATTRIBUTES_MAKE_ARGS(__path__) (__path__, attributes)
 static BOOL _win32_set_file_attributes(const LPCWSTR name, const DWORD attributes)
-{
-        BOOL    ret;
-        DWORD   err;
-        LPWSTR  unc;
+_FS_WIN32_API_CALL_FOO_BODY(BOOL, SetFileAttributesW, _FS_WIN32_SET_FILE_ATTRIBUTES_MAKE_ARGS, FALSE, name, FS_FALSE)
 
-        ret = SetFileAttributesW(name, attributes);
-        err = GetLastError();
-        if (ret || !_FS_IS_ERROR_EXCEED(err))
-                return ret;
-
-        unc = _win32_prepend_unc(name, FS_FALSE);
-        if (!unc)
-                return ret;
-
-        ret = SetFileAttributesW(unc, attributes);
-        free(unc);
-        return ret;
-}
-
+#define _FS_WIN32_GET_FILE_ATTRIBUTES_EX_MAKE_ARGS(__path__) (__path__, level, info)
 static BOOL _win32_get_file_attributes_ex(const LPCWSTR name, const GET_FILEEX_INFO_LEVELS level, const LPVOID info)
-{
-        BOOL    ret;
-        DWORD   err;
-        LPWSTR  unc;
+_FS_WIN32_API_CALL_FOO_BODY(BOOL, GetFileAttributesExW, _FS_WIN32_GET_FILE_ATTRIBUTES_EX_MAKE_ARGS, FALSE, name, FS_FALSE)
 
-        ret = GetFileAttributesExW(name, level, info);
-        err = GetLastError();
-        if (ret || !_FS_IS_ERROR_EXCEED(err))
-                return ret;
+#define _FS_WIN32_COPY_FILE_MAKE_ARGS(__path1__, __path2__) (__path1__, __path2__, fail)
+static BOOL _win32_copy_file(const LPCWSTR src, const LPCWSTR dst, const BOOL fail)
+_FS_WIN32_API_CALL_FOO_BODY2(BOOL, CopyFileW, _FS_WIN32_COPY_FILE_MAKE_ARGS, FALSE, src, dst)
 
-        unc = _win32_prepend_unc(name, FS_FALSE);
-        if (!unc)
-                return ret;
-
-        ret = GetFileAttributesExW(unc, level, info);
-        free(unc);
-        return ret;
-}
-
-static BOOL _win32_copy_file(const LPCWSTR str, const LPCWSTR dst, const BOOL fail)
-{
-        BOOL    ret;
-        DWORD   err;
-        LPWSTR  unc1;
-        LPWSTR  unc2;
-
-        ret = CopyFileW(str, dst, fail);
-        err = GetLastError();
-        if (ret || !_FS_IS_ERROR_EXCEED(err))
-                return ret;
-
-        unc1 = _win32_prepend_unc(str, FS_FALSE);
-        if (!unc1)
-                return ret;
-
-        unc2 = _win32_prepend_unc(str, FS_FALSE);
-        if (!unc2) {
-                free(unc1);
-                return ret;
-        }
-
-        ret = CopyFileW(unc1, unc2, fail);
-        free(unc1);
-        free(unc2);
-        return ret;
-}
-
+#define _FS_WIN32_CREATE_DIRECTORY_MAKE_ARGS(__path__) (__path__, sa)
 static BOOL _win32_create_directory(const LPCWSTR name, const LPSECURITY_ATTRIBUTES sa)
-{
-        BOOL    ret;
-        DWORD   err;
-        LPWSTR  unc;
-
-        ret = CreateDirectoryW(name, sa);
-        err = GetLastError();
-        if (ret || !_FS_IS_ERROR_EXCEED(err))
-                return ret;
-
-        unc = _win32_prepend_unc(name, FS_FALSE);
-        if (!unc)
-                return ret;
-
-        ret = CreateDirectoryW(unc, sa);
-        free(unc);
-        return ret;
-}
+_FS_WIN32_API_CALL_FOO_BODY(BOOL, CreateDirectoryW, _FS_WIN32_CREATE_DIRECTORY_MAKE_ARGS, FALSE, name, FS_FALSE)
 
 #ifdef _FS_SH_CREATE_DIRECTORY_AVAILABLE
 static int _win32_sh_create_directory_ex_w(const HWND window, const LPCWSTR name, const SECURITY_ATTRIBUTES *const sa)
@@ -1588,58 +1524,18 @@ static int _win32_sh_create_directory_ex_w(const HWND window, const LPCWSTR name
 }
 #endif
 
+#define _FS_WIN32_COPY_HARD_LINK_MAKE_ARGS(__path1__, __path2__) (__path1__, __path2__, sa)
 static BOOL _win32_create_hard_link(const LPCWSTR link, const LPCWSTR target, const LPSECURITY_ATTRIBUTES sa)
-{
-        BOOL    ret;
-        DWORD   err;
-        LPWSTR  unc1;
-        LPWSTR  unc2;
-
-        ret = CreateHardLinkW(link, target, sa);
-        err = GetLastError();
-        if (ret || !_FS_IS_ERROR_EXCEED(err))
-                return ret;
-
-        unc1 = _win32_prepend_unc(link, FS_FALSE);
-        if (!unc1)
-                return ret;
-
-        unc2 = _win32_prepend_unc(target, FS_FALSE);
-        if (!unc2) {
-                free(unc1);
-                return ret;
-        }
-
-        ret = CreateHardLinkW(unc1, unc2, sa);
-        free(unc1);
-        free(unc2);
-        return ret;
-}
+_FS_WIN32_API_CALL_FOO_BODY2(BOOL, CreateHardLinkW, _FS_WIN32_COPY_HARD_LINK_MAKE_ARGS, FALSE, link, target)
 
 static DWORD _win32_get_current_directory(const DWORD len, const LPWSTR buf)
 {
         return GetCurrentDirectoryW(len, buf);
 }
 
+#define _FS_WIN32_SET_CURRENT_DIRECTORY_MAKE_ARGS(__path__) (__path__)
 static BOOL _win32_set_current_directory(const LPCWSTR name)
-{
-        BOOL    ret;
-        DWORD   err;
-        LPWSTR  unc;
-
-        ret = SetCurrentDirectoryW(name);
-        err = GetLastError();
-        if (ret || !_FS_IS_ERROR_EXCEED(err))
-                return ret;
-
-        unc = _win32_prepend_unc(name, FS_FALSE);
-        if (!unc)
-                return ret;
-
-        ret = SetCurrentDirectoryW(unc);
-        free(unc);
-        return ret;
-}
+_FS_WIN32_API_CALL_FOO_BODY(BOOL, SetCurrentDirectoryW, _FS_WIN32_SET_CURRENT_DIRECTORY_MAKE_ARGS, FALSE, name, FS_FALSE)
 
 static BOOL _win32_get_file_information_by_handle(HANDLE handle, LPBY_HANDLE_FILE_INFORMATION info)
 {
@@ -1661,73 +1557,17 @@ static BOOL _win32_set_file_time(HANDLE handle, const FILETIME *creation, const 
         return SetFileTime(handle, creation, access, write);
 }
 
+#define _FS_WIN32_REMOVE_DIRECTORY_MAKE_ARGS(__path__) (__path__)
 static BOOL _win32_remove_directory(LPCWSTR name)
-{
-        BOOL    ret;
-        DWORD   err;
-        LPWSTR  unc;
+_FS_WIN32_API_CALL_FOO_BODY(BOOL, RemoveDirectoryW, _FS_WIN32_REMOVE_DIRECTORY_MAKE_ARGS, FALSE, name, FS_FALSE)
 
-        ret = RemoveDirectoryW(name);
-        err = GetLastError();
-        if (ret || !_FS_IS_ERROR_EXCEED(err))
-                return ret;
-
-        unc = _win32_prepend_unc(name, FS_FALSE);
-        if (!unc)
-                return ret;
-
-        ret = RemoveDirectoryW(unc);
-        free(unc);
-        return ret;
-}
-
+#define _FS_WIN32_DELETE_FILE_MAKE_ARGS(__path__) (__path__)
 static BOOL _win32_delete_file(LPCWSTR name)
-{
-        BOOL    ret;
-        DWORD   err;
-        LPWSTR  unc;
+_FS_WIN32_API_CALL_FOO_BODY(BOOL, DeleteFileW, _FS_WIN32_DELETE_FILE_MAKE_ARGS, FALSE, name, FS_FALSE)
 
-        ret = DeleteFileW(name);
-        err = GetLastError();
-        if (ret || !_FS_IS_ERROR_EXCEED(err))
-                return ret;
-
-        unc = _win32_prepend_unc(name, FS_FALSE);
-        if (!unc)
-                return ret;
-
-        ret = DeleteFileW(unc);
-        free(unc);
-        return ret;
-}
-
+#define _FS_WIN32_MOVE_FILE_MAKE_ARGS(__path1__, __path2__) (__path1__, __path2__)
 static BOOL _win32_move_file(LPCWSTR src, LPCWSTR dst)
-{
-        BOOL    ret;
-        DWORD   err;
-        LPWSTR  unc1;
-        LPWSTR  unc2;
-
-        ret = MoveFileW(src, dst);
-        err = GetLastError();
-        if (ret || !_FS_IS_ERROR_EXCEED(err))
-                return ret;
-
-        unc1 = _win32_prepend_unc(src, FS_FALSE);
-        if (!unc1)
-                return ret;
-
-        unc2 = _win32_prepend_unc(dst, FS_FALSE);
-        if (!unc2) {
-                free(unc1);
-                return ret;
-        }
-
-        ret               = MoveFileW(unc1, unc2);
-        free(unc1);
-        free(unc2);
-        return ret;
-}
+_FS_WIN32_API_CALL_FOO_BODY2(BOOL, MoveFileW, _FS_WIN32_MOVE_FILE_MAKE_ARGS, FALSE, src, dst)
 
 #ifndef _FS_FILE_END_OF_FILE_AVAILABLE
 static BOOL _win32_set_file_pointer_ex(HANDLE handle, LARGE_INTEGER off, PLARGE_INTEGER newp, DWORD method)
@@ -1746,45 +1586,13 @@ static BOOL _win32_set_end_of_file(HANDLE handle)
 }
 #endif /* !_FS_FILE_END_OF_FILE_AVAILABLE */
 
+#define _FS_WIN32_GET_VOLUME_PATH_NAME_MAKE_ARGS(__path__) (__path__, buf, len)
 static BOOL _win32_get_volume_path_name(LPCWSTR name, LPWSTR buf, DWORD len)
-{
-        BOOL    ret;
-        DWORD   err;
-        LPWSTR  unc;
+_FS_WIN32_API_CALL_FOO_BODY(BOOL, GetVolumePathNameW, _FS_WIN32_GET_VOLUME_PATH_NAME_MAKE_ARGS, FALSE, name, FS_FALSE)
 
-        ret = GetVolumePathNameW(name, buf, len);
-        err = GetLastError();
-        if (ret || !_FS_IS_ERROR_EXCEED(err))
-                return ret;
-
-        unc = _win32_prepend_unc(name, FS_FALSE);
-        if (!unc)
-                return ret;
-
-        ret = GetVolumePathNameW(unc, buf, len);
-        free(unc);
-        return ret;
-}
-
+#define _FS_WIN32_GET_DISK_FREE_SPACE_EX_MAKE_ARGS(__path__) (__path__, available, total, tfree)
 static BOOL _win32_get_disk_free_space_ex(LPCWSTR name, PULARGE_INTEGER available, PULARGE_INTEGER total, PULARGE_INTEGER tfree)
-{
-        BOOL    ret;
-        DWORD   err;
-        LPWSTR  unc;
-
-        ret = GetDiskFreeSpaceExW(name, available, total, tfree);
-        err = GetLastError();
-        if (ret || !_FS_IS_ERROR_EXCEED(err))
-                return ret;
-
-        unc = _win32_prepend_unc(name, FS_TRUE);
-        if (!unc)
-                return ret;
-
-        ret = GetDiskFreeSpaceExW(unc, available, total, tfree);
-        free(unc);
-        return ret;
-}
+_FS_WIN32_API_CALL_FOO_BODY(BOOL, GetDiskFreeSpaceExW, _FS_WIN32_GET_DISK_FREE_SPACE_EX_MAKE_ARGS, FALSE, name, FS_TRUE)
 
 static DWORD _win32_get_temp_path(DWORD len, LPWSTR buf)
 {
@@ -1881,7 +1689,7 @@ static fs_path _win32_get_final_path(fs_cpath p, _fs_path_kind *pkind, fs_error_
 #endif /* _FS_WINDOWS_VISTA */
 
         len = MAX_PATH;
-        buf = malloc(len * sizeof(wchar_t));
+        buf = malloc(len * sizeof(WCHAR));
 
         for (;;) {
 #ifdef _FS_WINDOWS_VISTA
@@ -1907,7 +1715,7 @@ static fs_path _win32_get_final_path(fs_cpath p, _fs_path_kind *pkind, fs_error_
 
                 if (req > len) {
                         free(buf);
-                        buf = malloc(req * sizeof(wchar_t));
+                        buf = malloc(req * sizeof(WCHAR));
                         len = req;
                 } else {
                         break;
@@ -1980,9 +1788,9 @@ static fs_path _win32_read_symlink(fs_cpath p, fs_error_code *ec)
         const HANDLE hFile = _win32_get_handle(
                 p, _fs_access_rights_File_read_attributes, flags, ec);
 
-        wchar_t                 buf[MAXIMUM_REPARSE_DATA_BUFFER_SIZE];
+        WCHAR                   buf[MAXIMUM_REPARSE_DATA_BUFFER_SIZE];
         USHORT                  len;
-        const wchar_t           *offset;
+        const WCHAR             *offset;
         _fs_reparse_data_buffer *rdata;
 
         if (_FS_IS_ERROR_SET(ec))
@@ -1997,25 +1805,25 @@ static fs_path _win32_read_symlink(fs_cpath p, fs_error_code *ec)
         rdata = (_fs_reparse_data_buffer *)buf;
         if (rdata->reparse_tag == _fs_reparse_tag_Symlink) {
                 const _fs_symbolic_link_reparse_buffer *sbuf = &rdata->buffer.symbolic_link_reparse_buffer;
-                const USHORT tmp                             = sbuf->print_name_length / sizeof(wchar_t);
+                const USHORT tmp                             = sbuf->print_name_length / sizeof(WCHAR);
 
                 if (tmp == 0) {
-                        len     = sbuf->substitute_name_length / sizeof(wchar_t);
-                        offset = &sbuf->path_buffer[sbuf->substitute_name_offset / sizeof(wchar_t)];
+                        len     = sbuf->substitute_name_length / sizeof(WCHAR);
+                        offset = &sbuf->path_buffer[sbuf->substitute_name_offset / sizeof(WCHAR)];
                 } else {
-                        len    = sbuf->print_name_length / sizeof(wchar_t);
-                        offset = &sbuf->path_buffer[sbuf->print_name_offset / sizeof(wchar_t)];
+                        len    = sbuf->print_name_length / sizeof(WCHAR);
+                        offset = &sbuf->path_buffer[sbuf->print_name_offset / sizeof(WCHAR)];
                 }
         } else if (rdata->reparse_tag == _fs_reparse_tag_Mount_point) {
                 const _fs_mount_point_reparse_buffer *jbuf = &rdata->buffer.mount_point_reparse_buffer;
-                const USHORT tmp                           = jbuf->print_name_length / sizeof(wchar_t);
+                const USHORT tmp                           = jbuf->print_name_length / sizeof(WCHAR);
 
                 if (tmp == 0) {
-                        len    = jbuf->substitute_name_length / sizeof(wchar_t);
-                        offset = &jbuf->path_buffer[jbuf->substitute_name_offset / sizeof(wchar_t)];
+                        len    = jbuf->substitute_name_length / sizeof(WCHAR);
+                        offset = &jbuf->path_buffer[jbuf->substitute_name_offset / sizeof(WCHAR)];
                 } else {
-                        len    = jbuf->print_name_length / sizeof(wchar_t);
-                        offset = &jbuf->path_buffer[jbuf->print_name_offset / sizeof(wchar_t)];
+                        len    = jbuf->print_name_length / sizeof(WCHAR);
+                        offset = &jbuf->path_buffer[jbuf->print_name_offset / sizeof(WCHAR)];
                 }
         } else {
                 _FS_SYSTEM_ERROR(ec, fs_win_error_reparse_tag_invalid);
@@ -2439,7 +2247,7 @@ static _fs_dir _find_first(const fs_cpath p, _fs_dir_entry *const entry, const f
         HANDLE handle;
 
         if (pattern) {
-                const fs_path tmp = malloc((wcslen(p) + 3) * sizeof(wchar_t));
+                const fs_path tmp = malloc((wcslen(p) + 3) * sizeof(WCHAR));
                 wcscpy(tmp, p);
                 wcscat(tmp, L"\\*");
                 sp = tmp;
@@ -2857,7 +2665,7 @@ extern fs_path fs_make_path(const char *p)
 {
 #ifdef _WIN32
         const size_t len = strlen(p);
-        wchar_t *buf     = calloc(len + 1, sizeof(wchar_t));
+        fs_char *buf     = calloc(len + 1, sizeof(fs_char));
         mbstowcs(buf, p, len);
         return buf;
 #else
@@ -2915,18 +2723,18 @@ extern fs_path fs_absolute(fs_cpath p, fs_error_code *ec)
         }
 
         len = MAX_PATH;
-        buf = malloc(len * sizeof(wchar_t));
+        buf = malloc(len * sizeof(WCHAR));
 
         for (;;) {
                 const DWORD req = _win32_get_full_path_name(p, len, buf, NULL);
                 if (req == 0) {
                         _FS_SYSTEM_ERROR(ec, GetLastError());
-                        return _FS_WDUP(L"");
+                        return _FS_WDUP(_FS_EMPTY);
                 }
 
                 if (req > len) {
                         free(buf);
-                        buf = malloc(req * sizeof(wchar_t));
+                        buf = malloc(req * sizeof(WCHAR));
                         len = req;
                 } else {
                         break;
@@ -2947,14 +2755,14 @@ extern fs_path fs_absolute(fs_cpath p, fs_error_code *ec)
 extern fs_path fs_canonical(const fs_cpath p, fs_error_code *ec)
 {
 #ifdef _WIN32
-        const wchar_t pref[] = L"\\\\?\\GLOBALROOT";
+        const WCHAR pref[] = L"\\\\?\\GLOBALROOT";
 
         fs_path       finalp;
         _fs_path_kind kind;
         _fs_char_it   buf;
         size_t        len;
-        wchar_t       *out;
-        wchar_t       *output;
+        WCHAR         *out;
+        WCHAR         *output;
 
 #elif defined(_FS_REALPATH_AVAILABLE)
         fs_path abs;
@@ -3008,8 +2816,8 @@ extern fs_path fs_canonical(const fs_cpath p, fs_error_code *ec)
         }
 #endif
 
-        len = sizeof(pref) / sizeof(wchar_t);
-        out = malloc((len + wcslen(buf)) * sizeof(wchar_t));
+        len = sizeof(pref) / sizeof(WCHAR);
+        out = malloc((len + wcslen(buf)) * sizeof(WCHAR));
         memcpy(out, pref, sizeof(pref));
         wcscat(out, buf);
 
@@ -3760,18 +3568,18 @@ extern fs_path fs_current_path(fs_error_code *ec)
 
 #ifdef _WIN32
         len = MAX_PATH;
-        buf = malloc(len * sizeof(wchar_t));
+        buf = malloc(len * sizeof(WCHAR));
 
         for (;;) {
                 const DWORD req = _win32_get_current_directory(len, buf);
                 if (req == 0) {
                         _FS_SYSTEM_ERROR(ec, GetLastError());
-                        return _FS_WDUP(L"");
+                        return _FS_WDUP(_FS_EMPTY);
                 }
 
                 if (req > len) {
                         free(buf);
-                        buf = malloc(req * sizeof(wchar_t));
+                        buf = malloc(req * sizeof(WCHAR));
                         len = req;
                 } else {
                         break;
@@ -4513,7 +4321,7 @@ extern fs_space_info fs_space(const fs_cpath p, fs_error_code *ec)
         ULARGE_INTEGER capacity;
         ULARGE_INTEGER free;
         ULARGE_INTEGER available;
-        wchar_t        buf[MAX_PATH];
+        WCHAR          buf[MAX_PATH];
 #else
         struct statvfs fs;
 #endif
@@ -4628,18 +4436,18 @@ extern fs_path fs_temp_directory_path(fs_error_code *ec)
 
 #ifdef _WIN32
         len = MAX_PATH;
-        buf = malloc(len * sizeof(wchar_t));
+        buf = malloc(len * sizeof(WCHAR));
 
         for (;;) {
                 const DWORD req = _win32_get_temp_path(len, buf);
                 if (req == 0) {
                         _FS_SYSTEM_ERROR(ec, GetLastError());
-                        return _FS_WDUP(L"");
+                        return _FS_WDUP(_FS_EMPTY);
                 }
 
                 if (req > len) {
                         free(buf);
-                        buf = malloc(req * sizeof(wchar_t));
+                        buf = malloc(req * sizeof(WCHAR));
                         len = req;
                 } else {
                         break;
@@ -4847,7 +4655,7 @@ extern void fs_path_append_s(fs_path *pp, fs_cpath other, fs_error_code *ec)
         }
 
         applen  = olen - (ortnend - other);
-        *pp     = realloc(p, (plen + applen + 1) * sizeof(FS_CHAR));
+        *pp     = realloc(p, (plen + applen + 1) * sizeof(fs_char));
         p       = *pp;
         p[plen] = _FS_PREF('\0');
         _FS_STRCAT(p, ortnend);
@@ -4877,7 +4685,7 @@ extern fs_path fs_path_concat(const fs_cpath p, const fs_cpath other, fs_error_c
 
         len1 = _FS_STRLEN(p);
         len2 = _FS_STRLEN(other) + 1;
-        out  = malloc((len1 + len2) * sizeof(FS_CHAR));
+        out  = malloc((len1 + len2) * sizeof(fs_char));
 
         _FS_STRCPY(out, p);
         _FS_STRCPY(out + len1, other);
@@ -4999,7 +4807,7 @@ extern void fs_path_replace_filename(fs_path *pp, const fs_cpath replacement, fs
                 return;
         }
 
-        repl = malloc((len + 1) * sizeof(FS_CHAR));
+        repl = malloc((len + 1) * sizeof(fs_char));
         _FS_STRCPY(repl, p);
         _FS_STRCAT(repl, replacement);
 
@@ -5074,7 +4882,7 @@ extern void fs_path_replace_extension(fs_path *pp, const fs_cpath replacement, f
                 return;
         }
 
-        repl = malloc((len + 1) * sizeof(FS_CHAR));
+        repl = malloc((len + 1) * sizeof(fs_char));
         if (!dot)
                 _FS_STRCAT(repl, _FS_DOT);
         _FS_STRCPY(repl, p);

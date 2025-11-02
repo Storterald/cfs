@@ -29,9 +29,12 @@ A single header implementation of `std::filesystem`/`Boost.Filesystem` in `C89`.
 
 ### OS requirements
 
-| Windows          | Linux                                 | BSD     | macOS X (Darwin) |
-|:-----------------|:--------------------------------------|:--------|:-----------------|
-| Windows **2000** | Kernel **2.0.38**<br/>Glibc **2.1.3** | **4.2** | Darwin **1.0**   |
+| Windows          | Linux                                 |
+|:-----------------|:--------------------------------------|
+| Windows **2000** | Kernel **2.0.38**<br/>Glibc **2.1.3** |
+
+Some specific fixes are implemented for `FreeBSD` and `Darwin` but compatibility
+won't be tested.
 
 ## Differences with std::filesystem
 
